@@ -1,0 +1,14 @@
+services:
+  paddle_ocr:
+    build:
+      context: ./paddle_ocr
+      dockerfile: Dockerfile
+    image: paddle_ocr_service:latest
+    container_name: english_ocr
+    ports:
+      - "8866:8866"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
