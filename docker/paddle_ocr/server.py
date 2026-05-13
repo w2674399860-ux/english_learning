@@ -1,31 +1,30 @@
-"""
-PaddleOCR HTTP 服务
-提供 /ocr 接口，供后端 FastAPI 调用进行图片文字识别
-请求方式：POST multipart/form-data，字段名：file
-返回格式：{"data": [{"text": "识别结果"}, ...]}
-"""
-
 import os
-import uuid
 import logging
 from tempfile import NamedTemporaryFile
-
 from fastapi import FastAPI, File, UploadFile
-from paddleocr import PaddleOCR
+from fastapi.middleware.cors import CORSMiddleware
+from rapidocr_onnxruntime import RapidOCR # 改用轻量化引擎
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="PaddleOCR Service")
+app = FastAPI(title="RapidOCR Service")
 
-# 全局初始化（首次加载较慢，之后复用）
-# 顺便帮你把警告里的参数也改了：use_angle_cls 改为 use_textline_orientation
-ocr = PaddleOCR(use_textline_orientation=True, lang="en")
+# 开启跨域支持
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# 初始化 RapidOCR (体积小，加载极快)
+engine = RapidOCR()
 
 @app.post("/ocr")
 async def ocr_recognize(file: UploadFile = File(...)):
-    """接收图片，返回识别到的文本行"""
+    logger.info(f"收到文件: {file.filename}")
     ext = os.path.splitext(file.filename or "image.jpg")[1] or ".jpg"
 
     with NamedTemporaryFile(delete=False, suffix=ext) as tmp:
@@ -33,25 +32,32 @@ async def ocr_recognize(file: UploadFile = File(...)):
         tmp_path = tmp.name
 
     try:
-        result = ocr.ocr(tmp_path, cls=True)
-        words = []
-        if result and result[0]:
-            for line in result[0]:
-                text = line[1][0]  # (bbox, (text, confidence))
-                words.append({"text": text})
-        logger.info(f"识别到 {len(words)} 个文本段")
-        return {"data": words}
+        # 执行识别，result 格式为 [[box, text, score], ...]
+        result, elapse = engine(tmp_path)
+        
+        words_list = []
+        if result:
+            for line in result:
+                text = line[1]
+                words_list.append({"text": text})
+        
+        logger.info(f"识别成功: 找到 {len(words_list)} 个文本段，耗时: {elapse}s")
+        
+        # 同时返回 data 和 words 字段，完美兼容你的主后端
+        return {
+            "data": words_list,
+            "words": words_list
+        }
     except Exception as e:
         logger.error(f"OCR 识别失败: {e}")
-        return {"data": []}
+        return {"data": [], "words": [], "error": str(e)}
     finally:
-        os.unlink(tmp_path)
-
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "paddle_ocr"}
-
+    return {"status": "ok", "service": "rapid_ocr"}
 
 if __name__ == "__main__":
     import uvicorn
