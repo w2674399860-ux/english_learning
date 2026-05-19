@@ -41,11 +41,13 @@ class ApiService {
 
   Future<Map<String, dynamic>> generateFillBlank(
     String english,
-    String chinese,
-  ) async {
+    String chinese, {
+    List<String> words = const [],
+  }) async {
     final response = await _dio.post(ApiConfig.storyFillBlank, data: {
       'english': english,
       'chinese': chinese,
+      'words': words,
     });
     return response.data;
   }

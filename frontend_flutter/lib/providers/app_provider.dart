@@ -51,6 +51,7 @@ class AppProvider extends ChangeNotifier {
       final fillBlankResult = await _api.generateFillBlank(
         storyResult['english'],
         storyResult['chinese'],
+        words: words,
       );
 
       _currentRecord = LearningRecord(

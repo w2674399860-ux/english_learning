@@ -20,6 +20,7 @@ class StoryResponse(BaseModel):
 class FillBlankRequest(BaseModel):
     english: str
     chinese: str
+    words: List[str] = []
 
 
 class FillBlankResponse(BaseModel):
@@ -39,6 +40,6 @@ async def generate_story(request: StoryRequest):
 @router.post("/fill-blank", response_model=FillBlankResponse)
 async def generate_fill_blank(request: FillBlankRequest):
     result = await ai_service.generate_fill_blank(
-        request.english, request.chinese
+        request.english, request.chinese, words=request.words
     )
     return result

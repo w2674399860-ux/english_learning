@@ -37,7 +37,7 @@ class OCRService:
             if text and self._is_valid_word(text):
                 words.append(text)
 
-        return list(set(words))
+        return list(dict.fromkeys(words))
 
     def _mock_ocr(self, image_data: bytes) -> list[str]:
         """Mock OCR: extracts basic image info and returns sample words."""

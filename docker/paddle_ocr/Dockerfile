@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir \
     fastapi \
     uvicorn \
     python-multipart \
+    opencv-python-headless \
     -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 3. 复制代码

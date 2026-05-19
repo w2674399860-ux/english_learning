@@ -36,12 +36,12 @@ class AIService:
         if any(kw in prompt.lower() for kw in ["fill in the blank", "fill-in-the-blank", "填空", "fill blank"]):
             return json.dumps({
                 "english_blank": "The ___ cat ___ over the wall.",
-                "chinese_blank": "___ 猫跳过了 ___ 墙。",
+                "chinese_blank": "那只 ___ (cat) ___ (jumped) 过了那堵 ___ (wall)。",
             })
         else:
             return json.dumps({
                 "english": "The quick brown fox jumps over the lazy dog.",
-                "chinese": "敏捷的棕色狐狸跳过了懒狗。",
+                "chinese": "敏捷的 (quick) 棕色 (brown) 狐狸 (fox) 跳过了 (jumps over) 懒洋洋的 (lazy) 狗 (dog)。",
             })
 
     async def generate_story(self, words: list[str], difficulty: str = "intermediate") -> dict:
@@ -54,6 +54,11 @@ class AIService:
             f"Create a short English story using ALL of these words: {', '.join(words)}.\n"
             f"Difficulty: {difficulty_prompts.get(difficulty, difficulty_prompts['intermediate'])}\n"
             "Then translate the story to Chinese.\n"
+            "IMPORTANT: In the Chinese translation, for each vocabulary word listed above, "
+            "include the original English word in parentheses immediately after its Chinese "
+            "equivalent. For example, if a vocabulary word is 'apple', write '苹果 (apple)' "
+            "instead of just '苹果'. If the same word appears multiple times, include the "
+            "parenthetical at least on its first occurrence.\n"
             "Return ONLY a JSON object with keys 'english' and 'chinese'."
         )
 
@@ -64,13 +69,24 @@ class AIService:
 
         return json.loads(content)
 
-    async def generate_fill_blank(self, english: str, chinese: str) -> dict:
+    async def generate_fill_blank(self, english: str, chinese: str, words: list[str] = None) -> dict:
+        words_instruction = ""
+        if words:
+            words_instruction = (
+                f"3. The EXACT words to blank out are: {', '.join(words)}.\n"
+                "Every single one of these words MUST be replaced with '___' wherever they appear "
+                "in the English text (including different grammatical forms like plurals or past tense), "
+                "and their corresponding translations must be blanked in the Chinese text.\n"
+            )
+
         prompt = (
             f"Based on this English text:\n{english}\n\n"
             f"And its Chinese translation:\n{chinese}\n\n"
             "Create fill-in-the-blank exercises:\n"
-            "1. Replace some key words with '___' in the English text\n"
+            "1. Replace ALL specified words with '___' in the English text\n"
             "2. Replace corresponding words with '___' in the Chinese text\n"
+            f"{words_instruction}"
+            "Make sure EVERY specified word is blanked out on every occurrence.\n"
             "Return ONLY a JSON object with keys 'english_blank' and 'chinese_blank'."
         )
 
