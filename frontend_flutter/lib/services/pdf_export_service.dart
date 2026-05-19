@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -7,8 +8,18 @@ import 'package:path_provider/path_provider.dart';
 import '../models/learning_record.dart';
 
 class PdfExportService {
+  pw.Font? _chineseFont;
+
+  Future<pw.Font> _getChineseFont() async {
+    if (_chineseFont != null) return _chineseFont!;
+    final fontData = await rootBundle.load('assets/fonts/NotoSansSC-Regular.ttf');
+    _chineseFont = pw.Font.ttf(fontData);
+    return _chineseFont!;
+  }
+
   Future<Uint8List> generatePdf(LearningRecord record) async {
-    final pdf = pw.Document();
+    final baseFont = await _getChineseFont();
+    final pdf = pw.Document(theme: pw.ThemeData.withFont(base: baseFont));
 
     pdf.addPage(
       pw.MultiPage(

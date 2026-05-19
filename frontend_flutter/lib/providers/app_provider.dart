@@ -100,6 +100,17 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> deleteRecord(int id) async {
+    try {
+      await _api.deleteRecord(id);
+      _records.removeWhere((r) => r.id == id);
+      notifyListeners();
+    } catch (e) {
+      _error = 'Failed to delete record: $e';
+      notifyListeners();
+    }
+  }
+
   void clearCurrentRecord() {
     _currentRecord = null;
     _pickedImage = null;

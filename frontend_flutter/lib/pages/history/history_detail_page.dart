@@ -39,7 +39,7 @@ class HistoryDetailPage extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 4,
                 children: record.words
-                    .map((w) => Chip(label: Text(w)))
+                    .map((w) => Chip(label: Text(w, style: const TextStyle(color: Colors.black87))))
                     .toList(),
               ),
             ),
@@ -48,7 +48,7 @@ class HistoryDetailPage extends StatelessWidget {
               title: 'English Story',
               child: RichText(
                 text: TextSpan(
-                  style: DefaultTextStyle.of(context).style,
+                  style: DefaultTextStyle.of(context).style.copyWith(color: Colors.black87),
                   children:
                       _buildEnglishSpans(record.englishStory, record.words),
                 ),
@@ -59,7 +59,7 @@ class HistoryDetailPage extends StatelessWidget {
               title: 'Chinese Translation',
               child: RichText(
                 text: TextSpan(
-                  style: DefaultTextStyle.of(context).style,
+                  style: DefaultTextStyle.of(context).style.copyWith(color: Colors.black87),
                   children: _buildChineseSpans(
                       record.chineseTranslation, record.words),
                 ),
@@ -70,7 +70,7 @@ class HistoryDetailPage extends StatelessWidget {
               title: 'English Fill-in-the-Blank',
               child: RichText(
                 text: TextSpan(
-                  style: DefaultTextStyle.of(context).style,
+                  style: DefaultTextStyle.of(context).style.copyWith(color: Colors.black87),
                   children: [TextSpan(text: record.englishBlank)],
                 ),
               ),
@@ -80,7 +80,7 @@ class HistoryDetailPage extends StatelessWidget {
               title: 'Chinese Fill-in-the-Blank',
               child: RichText(
                 text: TextSpan(
-                  style: DefaultTextStyle.of(context).style,
+                  style: DefaultTextStyle.of(context).style.copyWith(color: Colors.black87),
                   children: [TextSpan(text: record.chineseBlank)],
                 ),
               ),
@@ -126,11 +126,7 @@ List<TextSpan> _buildEnglishSpans(String text, List<String> words) {
     }
     spans.add(TextSpan(
       text: m.group(0),
-      style: const TextStyle(
-        decoration: TextDecoration.underline,
-        decorationColor: Colors.blue,
-        decorationThickness: 2.0,
-      ),
+      style: const TextStyle(color: Colors.black87),
     ));
     lastEnd = m.end;
   }
@@ -150,11 +146,6 @@ List<TextSpan> _buildChineseSpans(String text, List<String> words) {
 
   final wordSet = words.map((w) => w.toLowerCase()).toSet();
   final pattern = RegExp(r'（([^）]*)）|\(([^)]*)\)');
-  final underlineStyle = const TextStyle(
-    decoration: TextDecoration.underline,
-    decorationColor: Colors.blue,
-    decorationThickness: 2.0,
-  );
 
   final spans = <TextSpan>[];
   int lastEnd = 0;
@@ -167,7 +158,9 @@ List<TextSpan> _buildChineseSpans(String text, List<String> words) {
     final inner = (m.group(1) ?? m.group(2) ?? '').trim();
     spans.add(TextSpan(
       text: m.group(0),
-      style: wordSet.contains(inner.toLowerCase()) ? underlineStyle : null,
+      style: wordSet.contains(inner.toLowerCase())
+          ? const TextStyle(color: Colors.black87)
+          : null,
     ));
     lastEnd = m.end;
   }

@@ -69,4 +69,8 @@ class ApiService {
     });
     return response.data;
   }
+
+  Future<void> deleteRecord(int id) async {
+    await _dio.delete('${ApiConfig.historyRecords}/$id');
+  }
 }

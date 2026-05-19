@@ -37,7 +37,15 @@ class OCRService:
             if text and self._is_valid_word(text):
                 words.append(text)
 
-        return list(dict.fromkeys(words))
+        # Case-insensitive dedup preserving order and first-occurrence casing
+        seen = set()
+        unique = []
+        for w in words:
+            key = w.lower()
+            if key not in seen:
+                unique.append(w)
+                seen.add(key)
+        return unique
 
     def _mock_ocr(self, image_data: bytes) -> list[str]:
         """Mock OCR: extracts basic image info and returns sample words."""

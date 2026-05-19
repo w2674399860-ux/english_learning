@@ -20,6 +20,32 @@ class _HistoryPageState extends State<HistoryPage> {
     });
   }
 
+  void _confirmDelete(BuildContext context, LearningRecord record) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Record'),
+        content: Text('Are you sure you want to delete this record${record.words.isNotEmpty ? " (${record.words.join(", ")})" : ""}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              if (record.id != null) {
+                context.read<AppProvider>().deleteRecord(record.id!);
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -56,6 +82,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     builder: (_) => HistoryDetailPage(record: record),
                   ),
                 ),
+                onDelete: () => _confirmDelete(context, record),
               );
             },
           );
@@ -68,8 +95,13 @@ class _HistoryPageState extends State<HistoryPage> {
 class _RecordCard extends StatelessWidget {
   final LearningRecord record;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
-  const _RecordCard({required this.record, required this.onTap});
+  const _RecordCard({
+    required this.record,
+    required this.onTap,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -80,13 +112,28 @@ class _RecordCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 4, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                record.createdAt ?? '',
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      record.createdAt ?? '',
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    onPressed: onDelete,
+                    tooltip: 'Delete',
+                    color: Colors.red,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Text(
