@@ -17,6 +17,7 @@ class ApiService {
     ));
   }
 
+  // 恢复为 Map 返回类型，但在内部做了安全的 String-to-Map 兼容包装
   Future<Map<String, dynamic>> recognizeText(
     Uint8List bytes,
     String filename,
@@ -25,7 +26,13 @@ class ApiService {
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });
     final response = await _dio.post(ApiConfig.ocrRecognize, data: formData);
-    return response.data;
+    
+    final data = response.data;
+    if (data is String) {
+      // 兼容：如果后端返回的是纯文本，自动包装为 Map 结构
+      return {'text': data, 'words': <String>[]};
+    }
+    return data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> generateStory(
@@ -36,7 +43,7 @@ class ApiService {
       'words': words,
       'difficulty': difficulty,
     });
-    return response.data;
+    return response.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> generateFillBlank(
@@ -49,12 +56,12 @@ class ApiService {
       'chinese': chinese,
       'words': words,
     });
-    return response.data;
+    return response.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> saveRecord(Map<String, dynamic> record) async {
     final response = await _dio.post(ApiConfig.historySave, data: record);
-    return response.data;
+    return response.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> getRecords({
@@ -67,7 +74,7 @@ class ApiService {
       'page_size': pageSize,
       'search': search,
     });
-    return response.data;
+    return response.data as Map<String, dynamic>;
   }
 
   Future<void> deleteRecord(int id) async {

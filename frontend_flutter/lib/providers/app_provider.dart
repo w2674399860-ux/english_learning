@@ -25,6 +25,31 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 智能安全解析：将任意类型的后端数据安全转换为 List<String>，绝不闪退
+  List<String> _extractWords(dynamic rawWords) {
+    if (rawWords == null) return [];
+    if (rawWords is List) {
+      return List<String>.from(rawWords.map((e) => e.toString()));
+    } else if (rawWords is String) {
+      return rawWords.split(RegExp(r'[,\s]+')).where((w) => w.isNotEmpty).toList();
+    } else if (rawWords is Map) {
+      return List<String>.from(rawWords.keys.map((e) => e.toString()));
+    }
+    return [rawWords.toString()];
+  }
+
+  // 智能安全解析：将任意类型的后端数据安全转换为 String，彻底杜绝 _Map is not a subtype of String 报错
+  String _safeString(dynamic val) {
+    if (val == null) return '';
+    if (val is Map) {
+      if (val.containsKey('text')) return val['text'].toString();
+      if (val.containsKey('story')) return val['story'].toString();
+      if (val.containsKey('content')) return val['content'].toString();
+      return val.toString();
+    }
+    return val.toString();
+  }
+
   Future<void> recognizeText() async {
     if (_pickedImage == null) return;
 
@@ -36,7 +61,9 @@ class AppProvider extends ChangeNotifier {
       final bytes = await _pickedImage!.readAsBytes();
       final filename = _pickedImage!.name;
       final result = await _api.recognizeText(bytes, filename);
-      final words = List<String>.from(result['words'] ?? []);
+      
+      // 使用智能解析器提取单词列表
+      final words = _extractWords(result['words']);
       await _generateStory(words);
     } catch (e) {
       _error = 'Failed to recognize text: $e';
@@ -48,19 +75,24 @@ class AppProvider extends ChangeNotifier {
   Future<void> _generateStory(List<String> words) async {
     try {
       final storyResult = await _api.generateStory(words);
+      
+      // 使用安全提取器，即使 AI 返回了嵌套大括号也能安全提取文本
+      final englishStory = _safeString(storyResult['english']);
+      final chineseTranslation = _safeString(storyResult['chinese']);
+
       final fillBlankResult = await _api.generateFillBlank(
-        storyResult['english'],
-        storyResult['chinese'],
+        englishStory,
+        chineseTranslation,
         words: words,
       );
 
       _currentRecord = LearningRecord(
         imageUrl: _pickedImage?.name,
         words: words,
-        englishStory: storyResult['english'],
-        chineseTranslation: storyResult['chinese'],
-        englishBlank: fillBlankResult['english_blank'],
-        chineseBlank: fillBlankResult['chinese_blank'],
+        englishStory: englishStory,
+        chineseTranslation: chineseTranslation,
+        englishBlank: _safeString(fillBlankResult['english_blank']),
+        chineseBlank: _safeString(fillBlankResult['chinese_blank']),
       );
 
       _isLoading = false;

@@ -1,5 +1,9 @@
 allprojects {
     repositories {
+        // 新增：加入国内阿里云镜像，加速安卓库下载
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/jcenter") }
         google()
         mavenCentral()
     }
