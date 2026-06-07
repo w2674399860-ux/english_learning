@@ -13,23 +13,29 @@ class AIService:
         if not self.api_key or self.api_key == "your_deepseek_api_key_here":
             return self._mock_response(messages)
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                f"{self.api_base}/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": 0.7,
-                    "max_tokens": 2000,
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    f"{self.api_base}/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": 0.7,
+                        "max_tokens": 2000,
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            # 如果 DeepSeek API 调用失败（网络不通、密钥无效等），
+            # 降级到 mock 模式，确保前端功能可用
+            print(f"[AIService] DeepSeek API call failed: {e}, falling back to mock response")
+            return self._mock_response(messages)
 
     def _mock_response(self, messages: list) -> str:
         prompt = messages[-1]["content"] if messages else ""
