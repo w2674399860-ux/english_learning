@@ -5,7 +5,7 @@ class ApiConfig {
   static const int receiveTimeout = 60000;
 
   // API endpoints
-  static const String ocrRecognize = 'http://8.163.96.222:8866/ocr';
+  static const String ocrRecognize = '$baseUrl$apiPrefix/ocr/recognize';
   static const String storyGenerate = '$apiPrefix/story/generate';
   static const String storyFillBlank = '$apiPrefix/story/fill-blank';
   static const String historySave = '$apiPrefix/history/save';

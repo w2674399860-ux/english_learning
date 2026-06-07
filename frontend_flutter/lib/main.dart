@@ -1,16 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:dio/dio.dart'; // 1. 导入 dio 库
 import 'providers/app_provider.dart';
 import 'pages/home/home_page.dart';
 import 'pages/history/history_page.dart';
-
-// 2. 定义全局唯一的 Dio 网络请求客户端
-final dio = Dio(BaseOptions(
-  baseUrl: 'http://8.163.96.222:8866', // 您的服务器地址
-  connectTimeout: const Duration(seconds: 15),
-  receiveTimeout: const Duration(seconds: 15),
-));
 
 void main() {
   runApp(const MyApp());
