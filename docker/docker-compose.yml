@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   paddle_ocr:
     build:
@@ -10,5 +12,30 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    networks:
+      - app_network
     environment:
       - PYTHONUNBUFFERED=1
+
+  backend:
+    build:
+      context: ../backend_fastapi
+      dockerfile: Dockerfile
+    image: english_backend_service:latest
+    container_name: english_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - app_network
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DEEPSEEK_API_KEY=sk-REPLACED_KEY
+      - OCR_SERVICE_URL=http://english_ocr:8866
+      - OCR_MODE=docker
+
+networks:
+  app_network:
+    driver: bridge
