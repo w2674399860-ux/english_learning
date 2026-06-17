@@ -20,6 +20,9 @@ frontend_flutter/pubspec.lock
 
 # Environment
 .env
+.env.local
+*.env.local
+docker/.env
 
 # Docker
 docker/data/
