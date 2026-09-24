@@ -1,9 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../../widgets/highlighted_text.dart';
+import '../../widgets/save_button.dart';
+import '../../widgets/section_card.dart';
 
 class StoryPage extends StatelessWidget {
   const StoryPage({super.key});
+
+  Future<void> _save(BuildContext context) async {
+    // 先取出 messenger，避免 await 之后再用 context
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = context.read<AppProvider>();
+
+    final saved = await provider.saveCurrentRecord();
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          saved
+              ? 'Record saved'
+              : (provider.saveError ?? 'Failed to save record'),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -11,10 +32,12 @@ class StoryPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Learning Result'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: () => context.read<AppProvider>().saveCurrentRecord(),
-            tooltip: 'Save Record',
+          Consumer<AppProvider>(
+            builder: (context, provider, _) => SaveButton(
+              isSaving: provider.isSaving,
+              isSaved: provider.isSaved,
+              onPressed: () => _save(context),
+            ),
           ),
         ],
       ),
@@ -30,7 +53,7 @@ class StoryPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SectionCard(
+                SectionCard(
                   title: 'Recognized Words',
                   child: Wrap(
                     spacing: 8,
@@ -41,29 +64,23 @@ class StoryPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _SectionCard(
+                SectionCard(
                   title: 'English Story',
-                  child: RichText(
-                    text: TextSpan(
-                      style: DefaultTextStyle.of(context).style.copyWith(color: Colors.black87),
-                      children:
-                          _buildEnglishSpans(record.englishStory, record.words),
-                    ),
+                  child: HighlightedText.english(
+                    text: record.englishStory,
+                    words: record.words,
                   ),
                 ),
                 const SizedBox(height: 16),
-                _SectionCard(
+                SectionCard(
                   title: 'Chinese Translation',
-                  child: RichText(
-                    text: TextSpan(
-                      style: DefaultTextStyle.of(context).style.copyWith(color: Colors.black87),
-                      children: _buildChineseSpans(
-                          record.chineseTranslation, record.words),
-                    ),
+                  child: HighlightedText.chinese(
+                    text: record.chineseTranslation,
+                    words: record.words,
                   ),
                 ),
                 const SizedBox(height: 16),
-                _SectionCard(
+                SectionCard(
                   title: 'English Fill-in-the-Blank',
                   child: RichText(
                     text: TextSpan(
@@ -73,7 +90,7 @@ class StoryPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _SectionCard(
+                SectionCard(
                   title: 'Chinese Fill-in-the-Blank',
                   child: RichText(
                     text: TextSpan(
@@ -86,110 +103,6 @@ class StoryPage extends StatelessWidget {
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-/// Build underlined TextSpans for English passage.
-/// Matching memorized words case-insensitively with word boundaries.
-List<TextSpan> _buildEnglishSpans(String text, List<String> words) {
-  if (words.isEmpty || text.isEmpty) {
-    return [TextSpan(text: text)];
-  }
-
-  // Sort by length descending so longer words match before substrings
-  final sorted = List<String>.from(words)
-    ..sort((a, b) => b.length.compareTo(a.length));
-
-  final escaped = sorted.map((w) => RegExp.escape(w)).join('|');
-  final pattern = RegExp('\\b($escaped)\\b', caseSensitive: false);
-
-  final spans = <TextSpan>[];
-  int lastEnd = 0;
-
-  for (final m in pattern.allMatches(text)) {
-    if (m.start > lastEnd) {
-      spans.add(TextSpan(text: text.substring(lastEnd, m.start)));
-    }
-    spans.add(TextSpan(
-      text: m.group(0),
-      style: const TextStyle(color: Colors.black87),
-    ));
-    lastEnd = m.end;
-  }
-
-  if (lastEnd < text.length) {
-    spans.add(TextSpan(text: text.substring(lastEnd)));
-  }
-
-  return spans;
-}
-
-/// Build underlined TextSpans for Chinese passage.
-/// Matches English words in parentheses: (word) or （word）.
-List<TextSpan> _buildChineseSpans(String text, List<String> words) {
-  if (words.isEmpty || text.isEmpty) {
-    return [TextSpan(text: text)];
-  }
-
-  final wordSet = words.map((w) => w.toLowerCase()).toSet();
-  // Match both half-width (word) and full-width （word） parentheses
-  final pattern = RegExp(r'（([^）]*)）|\(([^)]*)\)');
-
-  final spans = <TextSpan>[];
-  int lastEnd = 0;
-
-  for (final m in pattern.allMatches(text)) {
-    if (m.start > lastEnd) {
-      spans.add(TextSpan(text: text.substring(lastEnd, m.start)));
-    }
-
-    final inner = (m.group(1) ?? m.group(2) ?? '').trim();
-    spans.add(TextSpan(
-      text: m.group(0),
-      style: wordSet.contains(inner.toLowerCase())
-          ? const TextStyle(color: Colors.black87)
-          : null,
-    ));
-    lastEnd = m.end;
-  }
-
-  if (lastEnd < text.length) {
-    spans.add(TextSpan(text: text.substring(lastEnd)));
-  }
-
-  return spans;
-}
-
-class _SectionCard extends StatelessWidget {
-  final String title;
-  final Widget child;
-
-  const _SectionCard({required this.title, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-            ),
-            const SizedBox(height: 12),
-            child,
-          ],
-        ),
       ),
     );
   }
