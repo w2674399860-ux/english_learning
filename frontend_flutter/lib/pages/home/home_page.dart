@@ -53,7 +53,13 @@ class HomePage extends StatelessWidget {
 
   Future<void> _pickImage(BuildContext context, ImageSource source) async {
     final picker = ImagePicker();
-    final image = await picker.pickImage(source: source);
+    // 压缩后再上传：手机原图通常 3~8MB，弱网下容易拖慢识别甚至超时。
+    // 1920 宽对 OCR 精度足够，相机与相册两条路径共用此处。
+    final image = await picker.pickImage(
+      source: source,
+      maxWidth: 1920,
+      imageQuality: 85,
+    );
 
     if (image != null && context.mounted) {
       context.read<AppProvider>().setPickedImage(image);
