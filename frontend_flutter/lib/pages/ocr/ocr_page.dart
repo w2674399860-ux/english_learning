@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../../widgets/phase_indicator.dart';
 import '../words/word_confirm_page.dart';
 
 class OcrPage extends StatefulWidget {
@@ -40,17 +41,8 @@ class _OcrPageState extends State<OcrPage> {
       appBar: AppBar(title: const Text('Recognizing Text')),
       body: Consumer<AppProvider>(
         builder: (context, provider, _) {
-          if (provider.isLoading) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Analyzing image...'),
-                ],
-              ),
-            );
+          if (provider.isBusy) {
+            return PhaseIndicator(phase: provider.phase);
           }
 
           if (provider.error != null) {

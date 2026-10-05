@@ -35,26 +35,14 @@ class ApiService {
     return data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> generateStory(
+  /// 一次请求生成短文、中译与中英文填空。
+  Future<Map<String, dynamic>> composeLearning(
     List<String> words, {
-    String difficulty = 'intermediate',
+    required String difficulty,
   }) async {
-    final response = await _dio.post(ApiConfig.storyGenerate, data: {
+    final response = await _dio.post(ApiConfig.learnCompose, data: {
       'words': words,
       'difficulty': difficulty,
-    });
-    return response.data as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> generateFillBlank(
-    String english,
-    String chinese, {
-    List<String> words = const [],
-  }) async {
-    final response = await _dio.post(ApiConfig.storyFillBlank, data: {
-      'english': english,
-      'chinese': chinese,
-      'words': words,
     });
     return response.data as Map<String, dynamic>;
   }

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../../widgets/degraded_banner.dart';
+import '../../widgets/difficulty_selector.dart';
+import '../../widgets/phase_indicator.dart';
 import '../story/story_page.dart';
 
 /// 识别完成后的单词确认页：勾选、删除、手动添加，确认后再生成短文。
@@ -62,6 +65,8 @@ class _WordConfirmPageState extends State<WordConfirmPage> {
 
           return Column(
             children: [
+              if (provider.ocrDegradedReason != null)
+                DegradedBanner(reason: provider.ocrDegradedReason!),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
@@ -129,18 +134,22 @@ class _WordConfirmPageState extends State<WordConfirmPage> {
                       ],
                     ),
                     const SizedBox(height: 12),
+                    DifficultySelector(
+                      value: provider.difficulty,
+                      onChanged:
+                          provider.isBusy ? null : provider.setDifficulty,
+                    ),
+                    const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed: provider.isLoading || selected.isEmpty
+                        onPressed: provider.isBusy || selected.isEmpty
                             ? null
                             : _generate,
-                        child: provider.isLoading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                        child: provider.isBusy
+                            ? PhaseIndicator(
+                                phase: provider.phase,
+                                compact: true,
                               )
                             : Text(
                                 provider.currentRecord == null

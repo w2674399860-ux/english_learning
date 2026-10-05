@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../models/learning_record.dart';
+import '../../widgets/history_list_parts.dart';
 import 'history_detail_page.dart';
 
 class HistoryPage extends StatefulWidget {
@@ -12,12 +15,45 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
+  static const _searchDebounce = Duration(milliseconds: 400);
+
+  late final TextEditingController _searchController;
+  Timer? _debounce;
+
   @override
   void initState() {
     super.initState();
+    // 搜索词保存在 Provider 中：切换 Tab 回来时保留搜索词，分页从第 1 页重新加载。
+    _searchController = TextEditingController(
+      text: context.read<AppProvider>().historyQuery,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().loadRecords();
     });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String text) {
+    _debounce?.cancel();
+    _debounce = Timer(_searchDebounce, () {
+      if (mounted) context.read<AppProvider>().searchRecords(text);
+    });
+  }
+
+  void _searchNow(String text) {
+    _debounce?.cancel();
+    context.read<AppProvider>().searchRecords(text);
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _searchNow('');
   }
 
   void _confirmDelete(BuildContext context, LearningRecord record) {
@@ -52,42 +88,86 @@ class _HistoryPageState extends State<HistoryPage> {
       appBar: AppBar(title: const Text('History')),
       body: Consumer<AppProvider>(
         builder: (context, provider, _) {
-          if (provider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          final error = provider.historyError;
 
-          if (provider.records.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.history, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No records yet'),
-                ],
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: _buildSearchField(),
               ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: provider.records.length,
-            itemBuilder: (context, index) {
-              final record = provider.records[index];
-              return _RecordCard(
-                record: record,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => HistoryDetailPage(record: record),
-                  ),
-                ),
-                onDelete: () => _confirmDelete(context, record),
-              );
-            },
+              if (error != null) _HistoryErrorText(message: error),
+              Expanded(child: _buildList(context, provider)),
+            ],
           );
         },
       ),
+    );
+  }
+
+  Widget _buildSearchField() {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _searchController,
+      builder: (context, value, _) => TextField(
+        controller: _searchController,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search words or English story',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: value.text.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.clear),
+                  tooltip: 'Clear search',
+                  onPressed: _clearSearch,
+                ),
+          isDense: true,
+          border: const OutlineInputBorder(),
+        ),
+        onChanged: _onSearchChanged,
+        onSubmitted: _searchNow,
+      ),
+    );
+  }
+
+  Widget _buildList(BuildContext context, AppProvider provider) {
+    if (provider.isLoadingHistory) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (provider.records.isEmpty) {
+      return HistoryEmptyState(
+        query: provider.historyQuery,
+        onClearSearch: _clearSearch,
+      );
+    }
+
+    final records = provider.records;
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: records.length + 1,
+      itemBuilder: (context, index) {
+        if (index == records.length) {
+          return HistoryListFooter(
+            loaded: records.length,
+            total: provider.historyTotal,
+            isLoadingMore: provider.isLoadingMoreHistory,
+            onLoadMore: provider.loadMoreRecords,
+          );
+        }
+
+        final record = records[index];
+        return _RecordCard(
+          record: record,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => HistoryDetailPage(record: record),
+            ),
+          ),
+          onDelete: () => _confirmDelete(context, record),
+        );
+      },
     );
   }
 }
@@ -156,6 +236,24 @@ class _RecordCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 历史加载 / 删除失败时显示在列表上方。
+class _HistoryErrorText extends StatelessWidget {
+  const _HistoryErrorText({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      color: scheme.errorContainer,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Text(message, style: TextStyle(color: scheme.onErrorContainer)),
     );
   }
 }

@@ -1,28 +1,44 @@
 import io
+import logging
 import httpx
 from PIL import Image
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class OCRService:
     def __init__(self):
         self.ocr_url = f"{settings.ocr_service_url}/ocr"
         self.mode = settings.ocr_mode
+        if self.mode != "docker":
+            logger.warning(
+                "OCR mode is %r: OCR may return mock words marked degraded. "
+                "Use ocr_mode=docker in production.", self.mode,
+            )
 
-    async def recognize(self, image_data: bytes) -> list[str]:
-        # Try Docker OCR service first
-        if self.mode in ("docker", "auto"):
-            try:
-                return await self._docker_ocr(image_data)
-            except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError):
-                if self.mode == "docker":
-                    raise OCRServiceError(
-                        "OCR Docker service is not running on port 8866. "
-                        "Please start it with: docker compose up -d"
-                    )
+    async def recognize(self, image_data: bytes) -> tuple[list[str], str | None]:
+        """返回 (词表, 降级 reason)，未降级时 reason 为 None。
 
-        # Fallback: mock mode for development/testing
-        return self._mock_ocr(image_data)
+        docker 模式下 OCR 不可用时抛 OCRServiceError；auto 模式回落 mock。
+        """
+        if self.mode == "mock":
+            return self._mock_ocr(image_data), "ocr_mock"
+
+        try:
+            return await self._docker_ocr(image_data), None
+        except httpx.HTTPError as e:
+            if self.mode == "docker":
+                logger.error(
+                    "OCR service call failed (%s): %s; is the OCR container running at %s?",
+                    type(e).__name__, e, self.ocr_url,
+                )
+                raise OCRServiceError("ocr_unavailable") from e
+            logger.warning(
+                "OCR service call failed (%s): %s; falling back to mock words",
+                type(e).__name__, e,
+            )
+            return self._mock_ocr(image_data), "ocr_unavailable"
 
     async def _docker_ocr(self, image_data: bytes) -> list[str]:
         async with httpx.AsyncClient(timeout=30.0) as client:

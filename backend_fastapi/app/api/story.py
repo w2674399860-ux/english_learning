@@ -1,7 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List
-from app.services.ai_service import AIService
+from app.api.errors import ai_http_error
+from app.schemas.common import DegradableResponse
+from app.services.ai_service import AIService, AIServiceError
 
 router = APIRouter()
 ai_service = AIService()
@@ -12,7 +14,7 @@ class StoryRequest(BaseModel):
     difficulty: str = "intermediate"
 
 
-class StoryResponse(BaseModel):
+class StoryResponse(DegradableResponse):
     english: str
     chinese: str
 
@@ -23,23 +25,31 @@ class FillBlankRequest(BaseModel):
     words: List[str] = []
 
 
-class FillBlankResponse(BaseModel):
+class FillBlankResponse(DegradableResponse):
     english_blank: str
     chinese_blank: str
 
 
-@router.post("/generate", response_model=StoryResponse)
+# 已废弃：前端改用 POST /api/v1/learn/compose。第二阶段收尾时再决定是否删除。
+@router.post("/generate", response_model=StoryResponse, deprecated=True)
 async def generate_story(request: StoryRequest):
+    """已废弃：请改用 POST /api/v1/learn/compose。第二阶段收尾时再决定是否删除。"""
     if not request.words:
         raise HTTPException(status_code=400, detail="Words list cannot be empty")
 
-    result = await ai_service.generate_story(request.words, request.difficulty)
-    return result
+    try:
+        return await ai_service.generate_story(request.words, request.difficulty)
+    except AIServiceError as e:
+        raise ai_http_error(e) from e
 
 
-@router.post("/fill-blank", response_model=FillBlankResponse)
+# 已废弃：前端改用 POST /api/v1/learn/compose。第二阶段收尾时再决定是否删除。
+@router.post("/fill-blank", response_model=FillBlankResponse, deprecated=True)
 async def generate_fill_blank(request: FillBlankRequest):
-    result = await ai_service.generate_fill_blank(
-        request.english, request.chinese, words=request.words
-    )
-    return result
+    """已废弃：请改用 POST /api/v1/learn/compose。第二阶段收尾时再决定是否删除。"""
+    try:
+        return await ai_service.generate_fill_blank(
+            request.english, request.chinese, words=request.words
+        )
+    except AIServiceError as e:
+        raise ai_http_error(e) from e
