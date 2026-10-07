@@ -6,7 +6,7 @@ from app.auth.dependencies import CurrentUser, get_current_user
 from app.auth.service import AuthService
 from app.db.session import get_session
 from app.models.user import User
-from app.ratelimit.dependencies import limit_per_ip
+from app.ratelimit.dependencies import limit_per_ip, limit_per_user
 from app.ratelimit.limiter import client_ip
 from app.schemas.auth import AuthOut, ChangePasswordRequest, LoginRequest, RegisterRequest, TokenOut, UserOut
 
@@ -46,7 +46,10 @@ async def me(user: CurrentUser = Depends(get_current_user), session: AsyncSessio
     return UserOut.from_user(await session.get(User, user.id))
 
 
-@router.post("/change-password", response_model=TokenOut)
+# 按用户限流，在校验原密码（哈希计算）之前计数
+@router.post(
+    "/change-password", response_model=TokenOut, dependencies=[Depends(limit_per_user("change_password"))]
+)
 async def change_password(
     body: ChangePasswordRequest,
     user: CurrentUser = Depends(get_current_user),

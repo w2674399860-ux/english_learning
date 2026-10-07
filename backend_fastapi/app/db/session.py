@@ -39,7 +39,8 @@ def _set_utc(dbapi_connection, connection_record):
 
 def make_engine(url: str, **kwargs) -> AsyncEngine:
     check_database_url(url)
-    options = {"pool_pre_ping": True}
+    # hide_parameters：数据库报错信息中不带 SQL 参数（可能含密码哈希、凭证哈希与用户内容）
+    options = {"pool_pre_ping": True, "hide_parameters": True}
     if "poolclass" not in kwargs:
         # pool_recycle 小于 MySQL 默认 wait_timeout（28800 秒）
         options.update(pool_recycle=1800, pool_size=5, max_overflow=10)

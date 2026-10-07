@@ -29,6 +29,7 @@ RULE_SETTINGS = {
     "compose": ("rate_limit_compose_per_user", "rate_limit_compose_window_seconds"),
     "login": ("rate_limit_login_per_ip", "rate_limit_login_window_seconds"),
     "register": ("rate_limit_register_per_ip", "rate_limit_register_window_seconds"),
+    "change_password": ("rate_limit_change_password_per_user", "rate_limit_change_password_window_seconds"),
 }
 
 # scope → 429 文案模板；{period} 如"每天"，{limit} 为额度，{wait} 如"请约 3 小时后再试"/"请 8 分钟后再试"
@@ -37,6 +38,7 @@ DETAIL_TEMPLATES = {
     "compose": "生成次数已用完（{period} {limit} 次），{wait}",
     "login": "登录尝试过于频繁（{period} {limit} 次），{wait}",
     "register": "注册过于频繁（{period} {limit} 次），{wait}",
+    "change_password": "修改密码尝试过于频繁（{period} {limit} 次），{wait}",
 }
 
 # 死锁（1213）与锁等待超时（1205）时整笔重试

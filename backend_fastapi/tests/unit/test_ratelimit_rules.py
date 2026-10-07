@@ -51,6 +51,7 @@ def test_period_text(window, text):
     ("compose", 10800, "生成次数已用完（每天 30 次），请约 3 小时后再试"),
     ("login", 480, "登录尝试过于频繁（每 10 分钟 10 次），请 8 分钟后再试"),
     ("register", 2400, "注册过于频繁（每小时 5 次），请 40 分钟后再试"),
+    ("change_password", 2400, "修改密码尝试过于频繁（每小时 10 次），请 40 分钟后再试"),
 ])
 def test_too_many_detail_uses_defaults(scope, retry_after, detail):
     assert limiter.too_many_detail(limiter.get_rule(scope), retry_after) == detail
@@ -167,6 +168,7 @@ def test_defaults_match_claude_md():
         "rate_limit_compose_per_user", "rate_limit_compose_window_seconds",
         "rate_limit_login_per_ip", "rate_limit_login_window_seconds",
         "rate_limit_register_per_ip", "rate_limit_register_window_seconds",
+        "rate_limit_change_password_per_user", "rate_limit_change_password_window_seconds",
         "compose_max_words", "compose_max_word_length",
         "max_upload_bytes", "max_request_bytes", "history_max_page_size",
     )} == {
@@ -174,6 +176,7 @@ def test_defaults_match_claude_md():
         "rate_limit_compose_per_user": 30, "rate_limit_compose_window_seconds": 86400,
         "rate_limit_login_per_ip": 10, "rate_limit_login_window_seconds": 600,
         "rate_limit_register_per_ip": 5, "rate_limit_register_window_seconds": 3600,
+        "rate_limit_change_password_per_user": 10, "rate_limit_change_password_window_seconds": 3600,
         "compose_max_words": 20, "compose_max_word_length": 40,
         "max_upload_bytes": 10 * 1024 * 1024, "max_request_bytes": 1024 * 1024, "history_max_page_size": 50,
     }
@@ -202,6 +205,7 @@ EXPECTED_LIMITS = {
     ("POST", "/api/v1/learn/compose"): ("compose", "user"),
     ("POST", "/api/v1/auth/login"): ("login", "ip"),
     ("POST", "/api/v1/auth/register"): ("register", "ip"),
+    ("POST", "/api/v1/auth/change-password"): ("change_password", "user"),
 }
 
 

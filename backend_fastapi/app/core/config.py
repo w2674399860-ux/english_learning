@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     rate_limit_login_window_seconds: int = Field(600, ge=1, le=86400)
     rate_limit_register_per_ip: int = Field(5, ge=1)
     rate_limit_register_window_seconds: int = Field(3600, ge=1, le=86400)
+    # 修改密码：按用户，防止持有凭证的人反复猜原密码（第一段安全自查 P4）
+    rate_limit_change_password_per_user: int = Field(10, ge=1)
+    rate_limit_change_password_window_seconds: int = Field(3600, ge=1, le=86400)
 
     # 输入上限（S-5）：生成与保存记录的词表超限返回 422；请求体超限返回 413
     compose_max_words: int = Field(20, ge=1)

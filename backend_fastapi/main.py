@@ -5,9 +5,10 @@ import os
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from app.core.config import settings
 from app.api.router import api_router
 from app.core.body_limit import BodySizeLimitMiddleware
@@ -96,6 +97,16 @@ app.add_middleware(CORSMiddleware, **cors_options(settings.cors_origins))
 warn_deprecated_settings()
 
 app.include_router(api_router)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """参数校验错误（422）：只返回 type / loc / msg。
+
+    FastAPI 默认在每条错误里带 input（请求中的原值）与 ctx，会把密码等原样回显（第一段安全自查 P1）。
+    """
+    errors = [{"type": e["type"], "loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 
 @app.get("/health")

@@ -1,19 +1,25 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.common import to_utc_iso
 
 Difficulty = Literal["beginner", "intermediate", "advanced"]
 
+# 字段长度上限（第一段安全自查 P2）：超长返回 422，而不是由数据库报错变成 500。
+# image_name 为 VARCHAR(255)；TEXT 列最多 65535 字节，utf8mb4 每字符最多 4 字节
+MAX_IMAGE_NAME_LENGTH = 255
+MAX_TEXT_LENGTH = 16000
+MAX_NOTES_LENGTH = 2000
+
 
 class SaveRecordRequest(BaseModel):
-    image_url: str
+    image_url: str = Field(max_length=MAX_IMAGE_NAME_LENGTH)
     words: list[str]
-    english_story: str
-    chinese_translation: str
-    english_blank: str
-    chinese_blank: str
+    english_story: str = Field(max_length=MAX_TEXT_LENGTH)
+    chinese_translation: str = Field(max_length=MAX_TEXT_LENGTH)
+    english_blank: str = Field(max_length=MAX_TEXT_LENGTH)
+    chinese_blank: str = Field(max_length=MAX_TEXT_LENGTH)
     # D-1 新增，可选：前端到第二段才开始发送
     difficulty: Difficulty = "intermediate"
     is_degraded: bool = False
@@ -21,7 +27,7 @@ class SaveRecordRequest(BaseModel):
 
 class UpdateRecordRequest(BaseModel):
     is_favorite: Optional[bool] = None
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=MAX_NOTES_LENGTH)
 
 
 class RecordOut(BaseModel):

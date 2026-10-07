@@ -221,6 +221,33 @@ async def test_forwarded_headers_are_not_trusted(db_client, limits, db_session):
     assert await counters(db_session) == {("login", "ip:203.0.113.1"): 3}
 
 
+async def test_change_password_is_limited_per_user(alice_client, limits, monkeypatch, db_session):
+    """持有凭证的人不能无限次猜当前密码：超限后不再做哈希计算。"""
+    limits("change_password", 2)
+    calls = []
+    real_verify = passwords.verify_password
+
+    async def spy_verify(*args, **kwargs):
+        calls.append(1)
+        return await real_verify(*args, **kwargs)
+
+    monkeypatch.setattr(passwords, "verify_password", spy_verify)
+    body = {"old_password": "wrong-password-1", "new_password": "brand-new-pass-7"}
+    url = "/api/v1/auth/change-password"
+    assert [alice_client.post(url, json=body).status_code for _ in range(2)] == [400, 400]
+    resp = alice_client.post(url, json=body)
+    assert resp.status_code == 429
+    assert resp.json() == {"detail": "修改密码尝试过于频繁（每分钟 2 次），请 1 分钟后再试"}
+    assert resp.headers["Retry-After"] == "30"
+    assert len(calls) == 2
+    # 正确的原密码同样被挡住；当前凭证仍有效
+    ok = {"old_password": DEFAULT_PASSWORD, "new_password": "brand-new-pass-7"}
+    assert alice_client.post(url, json=ok).status_code == 429
+    assert alice_client.get("/api/v1/auth/me").status_code == 200
+    user = f"u:{alice_client.user['id']}"
+    assert await counters(db_session, "change_password") == {("change_password", user): 4}
+
+
 # ---- 计入规则（S2） -----------------------------------------------------------------
 
 async def test_failed_and_degraded_requests_are_counted(alice_client, limits, use_ocr, upstream, use_ai, db_session):
