@@ -13,6 +13,7 @@ from sqlalchemy.engine import Connection, make_url
 from sqlalchemy.pool import NullPool
 
 import app.models.learning_record  # noqa: F401  注册模型到 Base.metadata
+import app.models.user  # noqa: F401
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import DatabaseConfigError, make_engine

@@ -3,6 +3,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from conftest import insert_user
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models.history import HistoryModel
@@ -23,8 +24,13 @@ def make_request(**overrides) -> SaveRecordRequest:
 
 
 @pytest.fixture
-def history(db_session):
-    return HistoryModel(db_session)
+async def user_id(db_session):
+    return await insert_user(db_session, "model_user")
+
+
+@pytest.fixture
+def history(db_session, user_id):
+    return HistoryModel(db_session, user_id)
 
 
 async def save_many(history, stories):
@@ -180,16 +186,53 @@ async def test_delete(history):
 
 # ---- 并发 -------------------------------------------------------------------
 
-async def test_concurrent_saves(db_engine):
+async def test_concurrent_saves(db_engine, user_id):
     sessionmaker = async_sessionmaker(db_engine, expire_on_commit=False)
 
     async def save_one(i):
         async with sessionmaker() as session:
-            return await HistoryModel(session).save(make_request(english_story=f"story {i}"))
+            return await HistoryModel(session, user_id).save(make_request(english_story=f"story {i}"))
 
     ids = await asyncio.gather(*(save_one(i) for i in range(20)))
     assert len(set(ids)) == 20
     async with sessionmaker() as session:
-        _, total = await HistoryModel(session).get_list(page=1, page_size=50, search="")
+        _, total = await HistoryModel(session, user_id).get_list(page=1, page_size=50, search="")
     assert total == 20
 
+
+# ---- 按用户隔离（A-2）--------------------------------------------------------
+
+async def test_records_are_isolated_per_user(db_session, user_id):
+    other_id = await insert_user(db_session, "other_user")
+    mine = HistoryModel(db_session, user_id)
+    theirs = HistoryModel(db_session, other_id)
+
+    my_id = await mine.save(make_request(english_story="mine", words=["shared"]))
+    their_id = await theirs.save(make_request(english_story="theirs", words=["shared", "secretword"]))
+
+    records, total = await mine.get_list(page=1, page_size=20, search="")
+    assert total == 1 and records[0].id == my_id
+    assert (await mine.get_list(page=1, page_size=20, search="secretword"))[1] == 0
+    assert await mine.get_by_id(their_id) is None
+    assert await mine.update(their_id, UpdateRecordRequest(is_favorite=True)) is False
+    assert await mine.delete(their_id) is False
+
+    db_session.expire_all()
+    rec = await theirs.get_by_id(their_id)
+    assert rec is not None and rec.is_favorite is False
+
+
+async def test_ownerless_records_are_invisible(db_session, user_id):
+    """user_id 为空的旧记录（D-1 期间的测试数据）任何用户都看不到。"""
+    from app.models.learning_record import LearningRecord
+
+    orphan = LearningRecord(
+        words=["old"], english_story="orphan", chinese_translation="", english_blank="", chinese_blank=""
+    )
+    db_session.add(orphan)
+    await db_session.commit()
+
+    history = HistoryModel(db_session, user_id)
+    assert (await history.get_list(page=1, page_size=20, search=""))[1] == 0
+    assert await history.get_by_id(orphan.id) is None
+    assert await history.delete(orphan.id) is False

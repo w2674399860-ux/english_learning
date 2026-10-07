@@ -1,3 +1,6 @@
+import asyncio
+import contextlib
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -9,11 +12,46 @@ from app.core.config import settings
 from app.api.router import api_router
 from app.db.session import dispose_engine
 
+logger = logging.getLogger("app")
+
+SESSION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+async def _cleanup_sessions_once() -> None:
+    from app.auth.service import AuthService
+    from app.db.session import get_engine, get_session
+
+    try:
+        get_engine()
+        async for session in get_session():
+            removed = await AuthService(session).cleanup_sessions()
+            logger.info("session cleanup: removed %d expired/revoked sessions", removed)
+    except Exception as e:  # 清理失败不影响服务启动
+        logger.warning("session cleanup failed: %s", type(e).__name__)
+
+
+async def _cleanup_sessions_forever() -> None:
+    while True:
+        await _cleanup_sessions_once()
+        await asyncio.sleep(SESSION_CLEANUP_INTERVAL_SECONDS)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    task = asyncio.create_task(_cleanup_sessions_forever()) if settings.session_cleanup_enabled else None
     yield
+    if task is not None:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
     await dispose_engine()
+
+
+def docs_options(enabled: bool) -> dict:
+    """API_DOCS_ENABLED 关闭时不注册 /docs、/redoc、/openapi.json（生产默认关闭）。"""
+    if enabled:
+        return {}
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
 
 
 app = FastAPI(
@@ -21,6 +59,7 @@ app = FastAPI(
     description="Backend API for AI-powered English learning application",
     version="1.0.0",
     lifespan=lifespan,
+    **docs_options(settings.api_docs_enabled),
 )
 
 app.add_middleware(

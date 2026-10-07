@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     # "mock": 始终返回示例词，同样标记 degraded
     ocr_mode: Literal["docker", "mock", "auto"] = "docker"
 
+    # 账号（A-2）
+    # 登录凭证有效期（天），从登录时起算，不随使用顺延
+    session_ttl_days: int = 30
+    # 是否启动时与每 24 小时清理过期 / 已撤销超过 7 天的会话
+    session_cleanup_enabled: bool = True
+    # 是否提供 /docs、/redoc、/openapi.json。默认关闭（生产）；本地开发在 .env 中打开
+    api_docs_enabled: bool = False
+
     # CORS
     frontend_url: str = "http://localhost:3000"
 

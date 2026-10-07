@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import CurrentUser, get_current_user
 from app.db.session import get_session
 from app.models.history import HistoryModel
 from app.schemas.history import RecordOut, RecordPage, SaveRecordRequest, UpdateRecordRequest
@@ -13,8 +14,11 @@ MAX_PAGE_SIZE = 50
 MAX_SEARCH_LENGTH = 100
 
 
-def get_history_model(session: AsyncSession = Depends(get_session)) -> HistoryModel:
-    return HistoryModel(session)
+def get_history_model(
+    user: CurrentUser = Depends(get_current_user), session: AsyncSession = Depends(get_session)
+) -> HistoryModel:
+    """当前用户的历史记录访问对象。user_id 只来自校验后的凭证。"""
+    return HistoryModel(session, user.id)
 
 
 @router.post("/save")

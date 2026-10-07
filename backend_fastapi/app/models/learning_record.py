@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, FetchedValue, Index, String, Text, text
+from sqlalchemy import JSON, Boolean, CheckConstraint, FetchedValue, ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.mysql import BIGINT, DATETIME
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,7 +12,8 @@ DIFFICULTIES = ("beginner", "intermediate", "advanced")
 class LearningRecord(Base):
     """学习记录。时间列存 UTC（不带时区的 DATETIME(3)），由数据库生成。
 
-    user_id 在 A-2 的迁移中再加（见 docs/数据库设计方案.md 4.3）。
+    user_id 可空：D-1 期间产生的无主测试记录保持为空，任何用户都看不到。
+    新记录一律带 user_id，且所有查询都按 user_id 过滤（app/models/history.py）。
     """
 
     __tablename__ = "learning_records"
@@ -20,7 +21,8 @@ class LearningRecord(Base):
         CheckConstraint(
             "difficulty IN ('beginner', 'intermediate', 'advanced')", name="difficulty_valid"
         ),
-        Index("idx_records_created", "created_at", "id"),
+        Index("idx_records_user_created", "user_id", "created_at", "id"),
+        Index("idx_records_user_fav", "user_id", "is_favorite"),
         {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_0900_ai_ci"},
     )
     # 插入 / 更新后取回数据库生成的 created_at、updated_at
@@ -46,4 +48,7 @@ class LearningRecord(Base):
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)"),
         server_onupdate=FetchedValue(),
+    )
+    user_id: Mapped[int | None] = mapped_column(
+        BIGINT(unsigned=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )

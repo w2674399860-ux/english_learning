@@ -29,6 +29,18 @@ def current_revision():
     return [r[0] for r in rows]
 
 
+def index_columns(table: str) -> dict[str, list[str]]:
+    rows = query(
+        "SELECT index_name, column_name FROM information_schema.statistics "
+        "WHERE table_schema = DATABASE() AND table_name = :t ORDER BY index_name, seq_in_index",
+        t=table,
+    )
+    result: dict[str, list[str]] = {}
+    for name, col in rows:
+        result.setdefault(name, []).append(col)
+    return result
+
+
 def head_revision():
     return ScriptDirectory.from_config(alembic_config()).get_current_head()
 
@@ -38,7 +50,7 @@ def test_upgrade_head_twice_is_noop(migrated_test_db):
     command.upgrade(cfg, "head")
     command.upgrade(cfg, "head")
     assert current_revision() == [head_revision()]
-    assert head_revision() == "0001"
+    assert head_revision() == "0002"
 
 
 def test_learning_records_columns(migrated_test_db):
@@ -52,7 +64,7 @@ def test_learning_records_columns(migrated_test_db):
     assert list(cols) == [
         "id", "words", "difficulty", "english_story", "chinese_translation",
         "english_blank", "chinese_blank", "is_favorite", "notes", "is_degraded",
-        "image_name", "created_at", "updated_at",
+        "image_name", "created_at", "updated_at", "user_id",
     ]
     assert cols["id"][0] == "bigint unsigned" and "auto_increment" in cols["id"][3]
     assert cols["words"][:2] == ("json", "NO")
@@ -66,7 +78,7 @@ def test_learning_records_columns(migrated_test_db):
     assert cols["created_at"][:3] == ("datetime(3)", "NO", "CURRENT_TIMESTAMP(3)")
     assert cols["updated_at"][:3] == ("datetime(3)", "NO", "CURRENT_TIMESTAMP(3)")
     assert "on update CURRENT_TIMESTAMP(3)" in cols["updated_at"][3]
-    assert "user_id" not in cols  # A-2 再加
+    assert cols["user_id"][:2] == ("bigint unsigned", "YES")  # 旧记录可为空（A-2）
 
 
 def test_table_charset_engine_and_index(migrated_test_db):
@@ -76,12 +88,11 @@ def test_table_charset_engine_and_index(migrated_test_db):
     )
     assert engine == "InnoDB"
     assert collation == "utf8mb4_0900_ai_ci"
-    index_cols = query(
-        "SELECT column_name FROM information_schema.statistics "
-        "WHERE table_schema = DATABASE() AND table_name = 'learning_records' "
-        "AND index_name = 'idx_records_created' ORDER BY seq_in_index"
-    )
-    assert [r[0] for r in index_cols] == ["created_at", "id"]
+    assert index_columns("learning_records") == {
+        "PRIMARY": ["id"],
+        "idx_records_user_created": ["user_id", "created_at", "id"],
+        "idx_records_user_fav": ["user_id", "is_favorite"],
+    }
 
 
 def test_difficulty_check_constraint_is_enforced(clean_db):
@@ -108,3 +119,74 @@ def test_downgrade_then_upgrade_roundtrip_on_test_db(migrated_test_db):
     assert current_revision() == [head_revision()]
     assert len(query("SHOW TABLES LIKE 'learning_records'")) == 1
 
+
+# ---- A-2：users / sessions / learning_records.user_id -----------------------
+
+def columns(table: str) -> dict[str, tuple]:
+    rows = query(
+        "SELECT column_name, column_type, is_nullable, column_default, character_set_name, collation_name "
+        "FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = :t "
+        "ORDER BY ordinal_position",
+        t=table,
+    )
+    return {r[0]: r[1:] for r in rows}
+
+
+def foreign_keys(table: str) -> set[tuple]:
+    rows = query(
+        "SELECT k.column_name, k.referenced_table_name, k.referenced_column_name, r.delete_rule "
+        "FROM information_schema.key_column_usage k "
+        "JOIN information_schema.referential_constraints r "
+        "  ON r.constraint_schema = k.constraint_schema AND r.constraint_name = k.constraint_name "
+        "WHERE k.table_schema = DATABASE() AND k.table_name = :t",
+        t=table,
+    )
+    return {tuple(r) for r in rows}
+
+
+def test_users_table(migrated_test_db):
+    cols = columns("users")
+    assert list(cols) == [
+        "id", "username", "password_hash", "is_active", "password_changed_at",
+        "last_login_at", "created_at", "updated_at",
+    ]
+    assert cols["username"][:2] == ("varchar(20)", "NO")
+    assert cols["password_hash"][:2] == ("varchar(255)", "NO")
+    assert cols["is_active"][:3] == ("tinyint(1)", "NO", "1")
+    assert index_columns("users") == {"PRIMARY": ["id"], "uk_users_username": ["username"]}
+
+
+def test_sessions_table(migrated_test_db):
+    cols = columns("sessions")
+    assert list(cols) == ["id", "user_id", "token_hash", "created_at", "expires_at", "revoked_at", "last_used_at"]
+    assert cols["token_hash"][:2] == ("char(64)", "NO")
+    assert cols["token_hash"][3:] == ("ascii", "ascii_bin")
+    assert cols["revoked_at"][1] == "YES"
+    assert index_columns("sessions") == {
+        "PRIMARY": ["id"],
+        "uk_sessions_token_hash": ["token_hash"],
+        "idx_sessions_user": ["user_id"],
+        "idx_sessions_expires": ["expires_at"],
+    }
+
+
+def test_foreign_keys_cascade(migrated_test_db):
+    assert foreign_keys("sessions") == {("user_id", "users", "id", "CASCADE")}
+    assert foreign_keys("learning_records") == {("user_id", "users", "id", "CASCADE")}
+
+
+# 超过 20 位由 VARCHAR(20) 拒绝（严格模式 Data too long），这里只测 CHECK 约束
+@pytest.mark.parametrize("username", ["Alice", "ab", "bad-name", "with space", "café"])
+def test_username_check_constraint(clean_db, username):
+    async def run():
+        engine = make_test_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("INSERT INTO users (username, password_hash) VALUES (:u, 'x')"), {"u": username}
+                )
+        finally:
+            await engine.dispose()
+
+    with pytest.raises(DBAPIError, match="check constraint|Check constraint"):
+        asyncio.run(run())

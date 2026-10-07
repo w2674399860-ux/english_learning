@@ -1,7 +1,8 @@
-from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from pydantic import BaseModel
+
+from app.schemas.common import to_utc_iso
 
 Difficulty = Literal["beginner", "intermediate", "advanced"]
 
@@ -21,11 +22,6 @@ class SaveRecordRequest(BaseModel):
 class UpdateRecordRequest(BaseModel):
     is_favorite: Optional[bool] = None
     notes: Optional[str] = None
-
-
-def to_utc_iso(value: datetime) -> str:
-    """数据库存的是不带时区的 UTC 时间；输出 ISO 8601 并带 Z，如 2026-10-07T03:47:00.123Z。"""
-    return value.replace(tzinfo=timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 class RecordOut(BaseModel):

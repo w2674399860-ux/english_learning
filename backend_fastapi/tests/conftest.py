@@ -66,10 +66,16 @@ os.environ.update({
     "OCR_SERVICE_URL": OCR_BASE,
     "OCR_MODE": "docker",
     "FRONTEND_URL": "http://localhost:3000",
+    "SESSION_TTL_DAYS": "30",
+    # 测试中开启接口文档（S-1 测试要访问 /docs）；关闭会话定时清理，避免后台任务干扰测试库
+    "API_DOCS_ENABLED": "true",
+    "SESSION_CLEANUP_ENABLED": "false",
 })
 
 import app.api.learn as learn_api  # noqa: E402
 import app.api.ocr as ocr_api  # noqa: E402
+import app.auth.passwords as passwords  # noqa: E402
+from app.auth.dependencies import CurrentUser, get_current_user  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.services.ai_service import AIService  # noqa: E402
 from app.services.learn_service import LearnService  # noqa: E402
@@ -207,12 +213,31 @@ def make_ocr_service(monkeypatch):
     return factory
 
 
+FAKE_USER = CurrentUser(id=424242, username="fake_user", session_id=1)
+
+
 @pytest.fixture
 def client():
+    """不连数据库的 TestClient：鉴权依赖替换为固定的假用户。
+
+    只给测试 OCR / 生成 / 静态路由等与账号无关的行为使用；鉴权本身在 test_auth_* 中连测试库测试。
+    """
     from fastapi.testclient import TestClient
 
-    with TestClient(fastapi_app) as c:
-        yield c
+    fastapi_app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    try:
+        with TestClient(fastapi_app) as c:
+            yield c
+    finally:
+        fastapi_app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture(autouse=True)
+def _cheap_password_hasher(monkeypatch):
+    """测试中用低成本参数，保持速度；生产参数由 test_auth_rules 单独断言。"""
+    from argon2 import PasswordHasher
+
+    monkeypatch.setattr(passwords, "password_hasher", PasswordHasher(time_cost=1, memory_cost=1024, parallelism=1))
 
 
 @pytest.fixture
@@ -246,7 +271,9 @@ def use_ocr(monkeypatch, make_ocr_service):
 #      NullPool 不保留连接，就不会出现共用
 #    - 每个测试开始前清空业务表，测试之间互不影响
 # ---------------------------------------------------------------------------
-DATA_TABLES = ("learning_records",)
+# 按外键依赖的反方向清空
+DATA_TABLES = ("learning_records", "sessions", "users")
+DEFAULT_PASSWORD = "river-stone-42"
 
 
 def alembic_config():
@@ -337,3 +364,32 @@ def db_client(clean_db):
         fastapi_app.dependency_overrides.pop(get_session, None)
         asyncio.run(engine.dispose())
 
+
+def bearer(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def register(client, username: str, password: str = DEFAULT_PASSWORD) -> dict:
+    """注册并返回响应体（含 token 与 user）。"""
+    resp = client.post("/api/v1/auth/register", json={"username": username, "password": password})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+@pytest.fixture
+def alice_client(db_client):
+    """已登录为 alice 的 TestClient（真实鉴权，连测试库）。"""
+    body = register(db_client, "alice")
+    db_client.headers.update(bearer(body["token"]))
+    db_client.user = body["user"]
+    return db_client
+
+
+async def insert_user(session, username: str) -> int:
+    """直接在库里建用户（模型层测试用，不走接口）。"""
+    from app.models.user import User
+
+    user = User(username=username, password_hash="not-a-real-hash")
+    session.add(user)
+    await session.commit()
+    return user.id
