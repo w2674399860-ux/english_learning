@@ -1,6 +1,6 @@
 import os
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.core.config import settings
@@ -32,9 +32,28 @@ async def health_check():
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 
 
+def _resolve_static_path(full_path: str) -> str | None:
+    """把请求路径解析为 static_dir 内的真实路径；越出 static_dir 时返回 None。
+
+    realpath 会解析 ..、符号链接与绝对路径；normcase 统一 Windows 的大小写与斜杠。
+    盘符不同时 commonpath 抛 ValueError，视为越界。路径含 NUL 时 realpath 不抛错，
+    照常做越界判断；目录内的这类路径随后 isfile 为 False，回落 index.html。
+    """
+    try:
+        root = os.path.realpath(static_dir)
+        target = os.path.realpath(os.path.join(root, full_path))
+        if os.path.commonpath([os.path.normcase(root), os.path.normcase(target)]) != os.path.normcase(root):
+            return None
+    except ValueError:
+        return None
+    return target
+
+
 @app.get("/{full_path:path}")
 async def serve_flutter(full_path: str):
-    file_path = os.path.join(static_dir, full_path)
+    file_path = _resolve_static_path(full_path)
+    if file_path is None:
+        raise HTTPException(status_code=404, detail="Not Found")
     if os.path.isfile(file_path):
         return FileResponse(file_path)
 
