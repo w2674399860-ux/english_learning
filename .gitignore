@@ -36,3 +36,6 @@ skills/
 
 # 本地测试用图片
 textimages/
+
+# UI 设计稿压缩包（只提交解压后的目录）
+ui设计/*.zip
