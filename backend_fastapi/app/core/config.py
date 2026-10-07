@@ -10,8 +10,11 @@ class Settings(BaseSettings):
     # 仅本地开发在 .env 中打开。
     ai_fallback_enabled: bool = False
 
-    # Database
-    database_url: str = "sqlite:///./data/english_learning.db"
+    # Database（MySQL 8.4，见 docs/数据库设计方案.md）。无默认值：未配置时首次访问数据库即报错，
+    # 不会悄悄连到别的库。格式：mysql+asyncmy://<用户>:<密码>@127.0.0.1:3307/english_learning?charset=utf8mb4
+    database_url: str = ""
+    # 只给测试与 `alembic -x target=test` 使用，库名必须是 english_learning_test
+    test_database_url: str = ""
 
     # Server
     server_host: str = "0.0.0.0"

@@ -193,7 +193,8 @@ def test_api_routes_unaffected(site, client, use_ocr):
     resp = client.post("/api/v1/ocr/recognize", files={"file": ("a.png", b"x", "image/png")})
     assert resp.status_code == 200
     assert resp.json()["reason"] == "ocr_mock"
-    assert client.get("/api/v1/history/records/abc").status_code == 422
+    # 参数校验错误仍由 API 路由返回 422（选一个不依赖数据库的接口，未配置测试库时也能跑）
+    assert client.post("/api/v1/learn/compose", json={"words": "x"}).status_code == 422
 
 
 def test_api_wrong_method_is_swallowed_by_spa_fallback(site, client):

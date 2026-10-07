@@ -1,15 +1,26 @@
 import os
+from contextlib import asynccontextmanager
+
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.api.router import api_router
+from app.db.session import dispose_engine
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await dispose_engine()
+
 
 app = FastAPI(
     title="AI English Learning App",
     description="Backend API for AI-powered English learning application",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

@@ -1,6 +1,37 @@
 version: '3.8'
 
 services:
+  mysql:
+    image: mysql:8.4.11
+    container_name: english_mysql
+    ports:
+      # 只绑定本机回环地址；主机端口 3307（本机 MySQL 8.0 占用 3306，不碰）
+      - "127.0.0.1:3307:3306"
+    environment:
+      # 值来自同目录 docker/.env；初始化脚本会检查是否已设置
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_APP_USER: ${MYSQL_APP_USER:-english_app}
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD}
+      TZ: UTC
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # 走 TCP：初始化阶段的临时服务器只监听 socket，不会被误判为健康；
+      # 服务器在运行时 mysqladmin ping 即返回 0（即使认证被拒），无需密码
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - app_network
+
   paddle_ocr:
     build:
       context: ./paddle_ocr
@@ -39,3 +70,8 @@ services:
 networks:
   app_network:
     driver: bridge
+
+volumes:
+  mysql_data:
+    # 固定卷名，不随 compose 项目名变化
+    name: english_learning_mysql_data

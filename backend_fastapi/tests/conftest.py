@@ -1,20 +1,54 @@
-"""测试公共设施：配置隔离、断网、上游打桩、TestClient。
+"""测试公共设施：配置隔离、测试库防护、断网、上游打桩、TestClient、数据库 fixture。
 
 导入顺序很重要：必须先写环境变量、再导入任何 app 模块。
 """
+import asyncio
 import io
 import os
 import socket
 import sys
-import tempfile
 from pathlib import Path
 
 import httpx
 import pytest
+from dotenv import dotenv_values
+from sqlalchemy.engine import make_url
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BACKEND_DIR))
 
 # ---------------------------------------------------------------------------
-# 1. 配置隔离：pydantic-settings 中进程环境变量优先于 .env，
+# 1. 测试库：只认 TEST_DATABASE_URL（进程环境变量优先，其次 backend_fastapi/.env 中这一个键）。
+#    库名必须是 english_learning_test，且不能指向本机 3306（本机 MySQL 8.0）。
+#    不满足时整轮测试中止；未配置时数据库测试跳过，其余测试照常运行。
+# ---------------------------------------------------------------------------
+TEST_DB_NAME = "english_learning_test"
+TEST_DATABASE_URL = (
+    os.environ.get("TEST_DATABASE_URL")
+    or dotenv_values(BACKEND_DIR / ".env").get("TEST_DATABASE_URL")
+    or ""
+)
+
+
+def _check_test_db_url(url: str) -> str | None:
+    """返回拒绝原因；安全时返回 None。错误信息里不带密码。"""
+    parsed = make_url(url)
+    if parsed.database != TEST_DB_NAME:
+        return f"database must be {TEST_DB_NAME!r}, got {parsed.database!r}"
+    if parsed.host in ("localhost", "127.0.0.1", "::1") and parsed.port in (None, 3306):
+        return "refusing to use local port 3306 (or no port): that is the host MySQL 8.0"
+    return None
+
+
+if TEST_DATABASE_URL:
+    _reason = _check_test_db_url(TEST_DATABASE_URL)
+    if _reason:
+        pytest.exit(f"unsafe TEST_DATABASE_URL: {_reason}", returncode=4)
+
+# ---------------------------------------------------------------------------
+# 2. 配置隔离：pydantic-settings 中进程环境变量优先于 .env，
 #    把 Settings 的全部字段写成测试值，测试结果不取决于本机 .env，真实 Key 也进不来。
+#    DATABASE_URL 也指向测试库：即使某段代码误用它，连到的也只是测试库。
 # ---------------------------------------------------------------------------
 TEST_API_KEY = "test-key-not-real"
 DEEPSEEK_BASE = "https://deepseek.test"
@@ -24,7 +58,8 @@ os.environ.update({
     "DEEPSEEK_API_KEY": TEST_API_KEY,
     "DEEPSEEK_API_BASE": DEEPSEEK_BASE,
     "AI_FALLBACK_ENABLED": "false",
-    "DATABASE_URL": "sqlite:///./unused-in-tests.db",
+    "DATABASE_URL": TEST_DATABASE_URL,
+    "TEST_DATABASE_URL": TEST_DATABASE_URL,
     "SERVER_HOST": "127.0.0.1",
     "SERVER_PORT": "8000",
     "DEBUG": "false",
@@ -32,19 +67,6 @@ os.environ.update({
     "OCR_MODE": "docker",
     "FRONTEND_URL": "http://localhost:3000",
 })
-
-BACKEND_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(BACKEND_DIR))
-
-# ---------------------------------------------------------------------------
-# 2. 导入 main 会连带执行 app/api/history.py 的模块级 HistoryModel()，
-#    它会打开并建表。先把数据库路径改到临时目录，避免碰开发库。
-# ---------------------------------------------------------------------------
-import app.models.history as _history_model  # noqa: E402
-
-_TMP_DB_DIR = tempfile.mkdtemp(prefix="e3a-tests-")
-_history_model.DB_DIR = _TMP_DB_DIR
-_history_model.DB_PATH = os.path.join(_TMP_DB_DIR, "unused.db")
 
 import app.api.learn as learn_api  # noqa: E402
 import app.api.ocr as ocr_api  # noqa: E402
@@ -64,24 +86,35 @@ _RealAsyncClient = httpx.AsyncClient
 def _block_sockets(monkeypatch):
     """兜底：任何绕过 httpx 打桩的真实连接（含 DNS）都直接失败。
 
-    唯一例外：Windows 上 asyncio 事件循环用 socket.socketpair() 建自唤醒管道，
-    其实现是在 127.0.0.1 上自连（3.13 中函数名为 _fallback_socketpair）。
-    只放行调用方正是这个函数的那一次 connect。
+    例外只有两个：
+    - Windows 上 asyncio 事件循环用 socket.socketpair() 建自唤醒管道，其实现是在 127.0.0.1 上自连
+      （3.13 中函数名为 _fallback_socketpair）。只放行调用方正是这个函数的那一次 connect。
+    - 测试库（TEST_DATABASE_URL 的主机与端口，已在上面校验过不是本机 3306）。
     """
     real_connect = socket.socket.connect
+    real_getaddrinfo = socket.getaddrinfo
     socketpair_impls = {"socketpair", "_fallback_socketpair"}
+    allowed = set()
+    if TEST_DATABASE_URL:
+        parsed = make_url(TEST_DATABASE_URL)
+        allowed.add((parsed.host, parsed.port))
 
     def guarded_connect(self, address):
-        if sys._getframe(1).f_code.co_name in socketpair_impls:
+        if sys._getframe(1).f_code.co_name in socketpair_impls or tuple(address[:2]) in allowed:
             return real_connect(self, address)
         raise RuntimeError(f"tests must not open network connections: {address!r}")
+
+    def guarded_getaddrinfo(host, port, *args, **kwargs):
+        if (host, port) in allowed:
+            return real_getaddrinfo(host, port, *args, **kwargs)
+        raise RuntimeError(f"tests must not open network connections: {(host, port)!r}")
 
     def guard(*args, **kwargs):
         raise RuntimeError(f"tests must not open network connections: {args!r}")
 
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket.socket, "connect_ex", guard)
-    monkeypatch.setattr(socket, "getaddrinfo", guard)
+    monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
 
 
 class Upstream:
@@ -204,3 +237,103 @@ def use_ocr(monkeypatch, make_ocr_service):
         return service
 
     return apply
+
+
+# ---------------------------------------------------------------------------
+# 6. 数据库（只连测试库）
+#    - 每轮测试开始时用 Alembic 把测试库升级到 head（顺带测了迁移脚本本身）
+#    - engine 用 NullPool：TestClient 在另一个线程跑自己的事件循环，连接不能跨事件循环复用；
+#      NullPool 不保留连接，就不会出现共用
+#    - 每个测试开始前清空业务表，测试之间互不影响
+# ---------------------------------------------------------------------------
+DATA_TABLES = ("learning_records",)
+
+
+def alembic_config():
+    from alembic.config import Config
+
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    cfg.attributes["target"] = "test"
+    cfg.attributes["skip_logging_config"] = True  # 不让 alembic 改写 pytest 的日志处理器
+    return cfg
+
+
+def make_test_engine():
+    from sqlalchemy.pool import NullPool
+
+    from app.db.session import make_engine
+
+    return make_engine(TEST_DATABASE_URL, poolclass=NullPool)
+
+
+async def _truncate(engine):
+    from sqlalchemy import text
+
+    async with engine.begin() as conn:
+        for table in DATA_TABLES:
+            await conn.execute(text(f"DELETE FROM {table}"))
+            await conn.execute(text(f"ALTER TABLE {table} AUTO_INCREMENT = 1"))
+
+
+@pytest.fixture(scope="session")
+def migrated_test_db():
+    if not TEST_DATABASE_URL:
+        pytest.skip("TEST_DATABASE_URL 未配置，跳过数据库测试（见 backend_fastapi/.env.example）")
+    from alembic import command
+
+    command.upgrade(alembic_config(), "head")
+    return TEST_DATABASE_URL
+
+
+@pytest.fixture
+def clean_db(migrated_test_db):
+    """同步 fixture：在任何事件循环之外清空业务表。"""
+    engine = make_test_engine()
+
+    async def run():
+        await _truncate(engine)
+        await engine.dispose()
+
+    asyncio.run(run())
+    return migrated_test_db
+
+
+@pytest.fixture
+async def db_engine(clean_db):
+    engine = make_test_engine()
+    yield engine
+    await engine.dispose()
+
+
+@pytest.fixture
+async def db_session(db_engine):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    async with async_sessionmaker(db_engine, expire_on_commit=False)() as session:
+        yield session
+
+
+@pytest.fixture
+def db_client(clean_db):
+    """接上测试库的 TestClient：替换 get_session 依赖项。"""
+    from fastapi.testclient import TestClient
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from app.db.session import get_session
+
+    engine = make_test_engine()
+    sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override():
+        async with sessionmaker() as session:
+            yield session
+
+    fastapi_app.dependency_overrides[get_session] = override
+    try:
+        with TestClient(fastapi_app) as c:
+            yield c
+    finally:
+        fastapi_app.dependency_overrides.pop(get_session, None)
+        asyncio.run(engine.dispose())
+

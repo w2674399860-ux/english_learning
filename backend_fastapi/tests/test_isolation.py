@@ -1,12 +1,11 @@
 """证明测试设施本身有效：不读真实配置、连不出网络、不碰开发数据库。"""
 import socket
-from pathlib import Path
 
 import httpx
 import pytest
-from conftest import BACKEND_DIR, DEEPSEEK_BASE, OCR_BASE, TEST_API_KEY
+from conftest import DEEPSEEK_BASE, OCR_BASE, TEST_API_KEY, TEST_DATABASE_URL, _check_test_db_url
+from sqlalchemy.engine import make_url
 
-import app.models.history as history_model
 from app.core.config import settings
 
 
@@ -35,6 +34,24 @@ async def test_unmocked_async_request_fails_the_test():
             await client.get("https://api.deepseek.com/v1/models")
 
 
-def test_dev_database_is_not_used():
-    dev_db = (BACKEND_DIR / "data" / "english_learning.db").resolve()
-    assert Path(history_model.DB_PATH).resolve() != dev_db
+def test_database_url_points_to_test_db_only():
+    """DATABASE_URL 在测试进程中被覆盖为测试库地址（或为空），开发库永远连不上。"""
+    assert settings.database_url == TEST_DATABASE_URL
+    if TEST_DATABASE_URL:
+        url = make_url(TEST_DATABASE_URL)
+        assert url.database == "english_learning_test"
+        assert url.port not in (None, 3306)
+
+
+@pytest.mark.parametrize("url, reason", [
+    ("mysql+asyncmy://u:p@127.0.0.1:3307/english_learning", "database must be"),
+    ("mysql+asyncmy://u:p@127.0.0.1:3306/english_learning_test", "3306"),
+    ("mysql+asyncmy://u:p@localhost/english_learning_test", "3306"),
+])
+def test_unsafe_test_database_urls_are_rejected(url, reason):
+    assert reason in _check_test_db_url(url)
+    assert "p@" not in _check_test_db_url(url)
+
+
+def test_safe_test_database_url_is_accepted():
+    assert _check_test_db_url("mysql+asyncmy://u:p@127.0.0.1:3307/english_learning_test") is None

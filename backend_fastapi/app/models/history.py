@@ -1,144 +1,75 @@
-import sqlite3
-import json
-import os
-from datetime import datetime
-from typing import Optional
-from app.schemas.history import SaveRecordRequest, UpdateRecordRequest
+from sqlalchemy import CHAR, cast, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-DB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
-DB_PATH = os.path.join(DB_DIR, "english_learning.db")
+from app.models.learning_record import LearningRecord
+from app.schemas.history import SaveRecordRequest, UpdateRecordRequest
 
 
 class HistoryModel:
-    def __init__(self):
-        os.makedirs(DB_DIR, exist_ok=True)
-        self._init_db()
+    """学习记录的数据访问。每个请求一个实例，会话由 FastAPI 依赖项注入。"""
 
-    def _get_connection(self):
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init_db(self):
-        conn = self._get_connection()
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS learning_records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                image_url TEXT,
-                words TEXT,
-                english_story TEXT,
-                chinese_translation TEXT,
-                english_blank TEXT,
-                chinese_blank TEXT,
-                is_favorite INTEGER DEFAULT 0,
-                notes TEXT,
-                created_at TEXT,
-                updated_at TEXT
-            )
-        """)
-        conn.commit()
-        conn.close()
+    def __init__(self, session: AsyncSession):
+        self.session = session
 
     async def save(self, request: SaveRecordRequest) -> int:
-        now = datetime.now().isoformat()
-        conn = self._get_connection()
-        cursor = conn.execute(
-            """INSERT INTO learning_records
-               (image_url, words, english_story, chinese_translation,
-                english_blank, chinese_blank, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                request.image_url,
-                json.dumps(request.words, ensure_ascii=False),
-                request.english_story,
-                request.chinese_translation,
-                request.english_blank,
-                request.chinese_blank,
-                now,
-                now,
-            ),
+        record = LearningRecord(
+            image_name=request.image_url,
+            words=request.words,
+            difficulty=request.difficulty,
+            is_degraded=request.is_degraded,
+            english_story=request.english_story,
+            chinese_translation=request.chinese_translation,
+            english_blank=request.english_blank,
+            chinese_blank=request.chinese_blank,
         )
-        conn.commit()
-        record_id = cursor.lastrowid
-        conn.close()
-        return record_id
+        self.session.add(record)
+        await self.session.commit()
+        return record.id
 
-    async def get_list(self, page: int = 1, page_size: int = 20, search: str = ""):
-        conn = self._get_connection()
-        offset = (page - 1) * page_size
+    async def get_list(
+        self, page: int = 1, page_size: int = 20, search: str = ""
+    ) -> tuple[list[LearningRecord], int]:
+        stmt = select(LearningRecord)
+        term = search.strip()
+        if term:
+            # autoescape：把 / % _ 转义并加 ESCAPE '/'，用户输入按字面匹配；值走参数绑定。
+            # CAST(JSON AS CHAR) 的排序规则跟随连接的排序规则（连接若为 utf8mb4_bin 就区分大小写）；
+            # 显式指定，让搜索行为不依赖连接配置，与短文列一致。
+            stmt = stmt.where(or_(
+                LearningRecord.english_story.contains(term, autoescape=True),
+                cast(LearningRecord.words, CHAR)
+                .collate("utf8mb4_0900_ai_ci")
+                .contains(term, autoescape=True),
+            ))
 
-        if search:
-            where = "WHERE english_story LIKE ? OR words LIKE ?"
-            params = [f"%{search}%", f"%{search}%"]
-        else:
-            where = ""
-            params = []
+        total = await self.session.scalar(select(func.count()).select_from(stmt.subquery()))
+        rows = await self.session.scalars(
+            stmt.order_by(LearningRecord.created_at.desc(), LearningRecord.id.desc())
+            .limit(page_size)
+            .offset((page - 1) * page_size)
+        )
+        return list(rows), total
 
-        count_row = conn.execute(
-            f"SELECT COUNT(*) as total FROM learning_records {where}", params
-        ).fetchone()
-        total = count_row["total"]
-
-        rows = conn.execute(
-            f"SELECT * FROM learning_records {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            params + [page_size, offset],
-        ).fetchall()
-
-        records = [dict(row) for row in rows]
-        for r in records:
-            r["words"] = json.loads(r["words"])
-
-        conn.close()
-        return records, total
-
-    async def get_by_id(self, record_id: int) -> Optional[dict]:
-        conn = self._get_connection()
-        row = conn.execute(
-            "SELECT * FROM learning_records WHERE id = ?", (record_id,)
-        ).fetchone()
-        conn.close()
-
-        if row:
-            result = dict(row)
-            result["words"] = json.loads(result["words"])
-            return result
-        return None
+    async def get_by_id(self, record_id: int) -> LearningRecord | None:
+        return await self.session.get(LearningRecord, record_id)
 
     async def update(self, record_id: int, request: UpdateRecordRequest) -> bool:
-        conn = self._get_connection()
-        updates = []
-        params = []
-
-        if request.is_favorite is not None:
-            updates.append("is_favorite = ?")
-            params.append(1 if request.is_favorite else 0)
-        if request.notes is not None:
-            updates.append("notes = ?")
-            params.append(request.notes)
-
-        if not updates:
-            conn.close()
+        if request.is_favorite is None and request.notes is None:
             return False
-
-        updates.append("updated_at = ?")
-        params.append(datetime.now().isoformat())
-        params.append(record_id)
-
-        cursor = conn.execute(
-            f"UPDATE learning_records SET {', '.join(updates)} WHERE id = ?",
-            params,
-        )
-        conn.commit()
-        affected = cursor.rowcount
-        conn.close()
-        return affected > 0
+        record = await self.session.get(LearningRecord, record_id)
+        if record is None:
+            return False
+        if request.is_favorite is not None:
+            record.is_favorite = request.is_favorite
+        if request.notes is not None:
+            record.notes = request.notes
+        await self.session.commit()
+        return True
 
     async def delete(self, record_id: int) -> bool:
-        conn = self._get_connection()
-        cursor = conn.execute(
-            "DELETE FROM learning_records WHERE id = ?", (record_id,)
-        )
-        conn.commit()
-        affected = cursor.rowcount
-        conn.close()
-        return affected > 0
+        record = await self.session.get(LearningRecord, record_id)
+        if record is None:
+            return False
+        await self.session.delete(record)
+        await self.session.commit()
+        return True
