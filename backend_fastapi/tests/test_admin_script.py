@@ -80,3 +80,34 @@ def test_refuses_local_3306(monkeypatch, capsys):
     code = admin.main(["list-users"])
     out = capsys.readouterr().out
     assert code == 2 and "拒绝执行" in out and "secretpw" not in out
+
+
+async def _old_counter():
+    from datetime import timedelta
+
+    from conftest import make_test_engine
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from app.models.rate_limit import RateLimitCounter
+    from app.schemas.common import utcnow
+
+    engine = make_test_engine()
+    try:
+        async with async_sessionmaker(engine)() as s:
+            s.add(RateLimitCounter(scope="login", subject="ip:203.0.113.1",
+                                   window_start=utcnow().replace(microsecond=0) - timedelta(days=3), count=1))
+            await s.commit()
+    finally:
+        await engine.dispose()
+
+
+def test_cleanup_rate_limits(db_client, monkeypatch, capsys):
+    import asyncio
+
+    asyncio.run(_old_counter())
+    code, out = run(monkeypatch, capsys, ["cleanup-rate-limits", "--dry-run"])
+    assert code == 0 and "[dry-run] 将删除 1 条" in out
+    code, out = run(monkeypatch, capsys, ["cleanup-rate-limits"])
+    assert code == 0 and "已删除 1 条" in out
+    code, out = run(monkeypatch, capsys, ["cleanup-rate-limits", "--dry-run"])
+    assert "[dry-run] 将删除 0 条" in out

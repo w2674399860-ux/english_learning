@@ -50,7 +50,7 @@ def test_upgrade_head_twice_is_noop(migrated_test_db):
     command.upgrade(cfg, "head")
     command.upgrade(cfg, "head")
     assert current_revision() == [head_revision()]
-    assert head_revision() == "0002"
+    assert head_revision() == "0003"
 
 
 def test_learning_records_columns(migrated_test_db):
@@ -190,3 +190,29 @@ def test_username_check_constraint(clean_db, username):
 
     with pytest.raises(DBAPIError, match="check constraint|Check constraint"):
         asyncio.run(run())
+
+
+# ---- S-5：rate_limit_counters ---------------------------------------------------
+
+def test_rate_limit_counters_table(migrated_test_db):
+    cols = columns("rate_limit_counters")
+    assert list(cols) == ["scope", "subject", "window_start", "count"]
+    assert cols["scope"][:2] == ("varchar(32)", "NO")
+    assert cols["subject"][:2] == ("varchar(64)", "NO")
+    assert cols["scope"][3:] == cols["subject"][3:] == ("ascii", "ascii_bin")
+    assert cols["window_start"][:2] == ("datetime", "NO")
+    assert cols["count"][:3] == ("int unsigned", "NO", "0")
+    assert index_columns("rate_limit_counters") == {
+        "PRIMARY": ["scope", "subject", "window_start"],
+        "idx_rl_window": ["window_start"],
+    }
+    assert foreign_keys("rate_limit_counters") == set()
+
+
+def test_downgrade_one_step_drops_only_rate_limit_counters(migrated_test_db):
+    cfg = alembic_config()
+    command.downgrade(cfg, "0002")
+    assert query("SHOW TABLES LIKE 'rate_limit_counters'") == []
+    assert len(query("SHOW TABLES LIKE 'sessions'")) == 1
+    command.upgrade(cfg, "head")
+    assert current_revision() == ["0003"]

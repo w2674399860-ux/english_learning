@@ -1,6 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from typing import List
 from app.api.errors import OCR_UNAVAILABLE_DETAIL
+from app.ratelimit.dependencies import limit_per_user
 from app.schemas.common import DegradableResponse
 from app.services.ocr_service import OCRService, OCRServiceError
 
@@ -12,7 +13,8 @@ class OcrResponse(DegradableResponse):
     words: List[str]
 
 
-@router.post("/recognize", response_model=OcrResponse)
+# 图片大小上限由 app/core/body_limit.py 在中间件中检查（早于鉴权，超限 413）
+@router.post("/recognize", response_model=OcrResponse, dependencies=[Depends(limit_per_user("ocr"))])
 async def recognize_text(file: UploadFile = File(...)):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed")

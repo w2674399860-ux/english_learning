@@ -6,6 +6,8 @@ from app.auth.dependencies import CurrentUser, get_current_user
 from app.auth.service import AuthService
 from app.db.session import get_session
 from app.models.user import User
+from app.ratelimit.dependencies import limit_per_ip
+from app.ratelimit.limiter import client_ip
 from app.schemas.auth import AuthOut, ChangePasswordRequest, LoginRequest, RegisterRequest, TokenOut, UserOut
 
 public_router = APIRouter()
@@ -16,20 +18,18 @@ def get_auth_service(session: AsyncSession = Depends(get_session)) -> AuthServic
     return AuthService(session)
 
 
-def _client_ip(request: Request) -> str:
-    # 本阶段取连接地址，不信任 X-Forwarded-For（部署到反向代理后在 S-5 / 上线清单中调整）
-    return request.client.host if request.client else "unknown"
-
-
-@public_router.post("/register", response_model=AuthOut, status_code=201)
+# 登录、注册按 IP 限流（S-5），在密码哈希之前计数
+@public_router.post(
+    "/register", response_model=AuthOut, status_code=201, dependencies=[Depends(limit_per_ip("register"))]
+)
 async def register(body: RegisterRequest, request: Request, auth: AuthService = Depends(get_auth_service)):
-    user, issued = await auth.register(body.username, body.password, _client_ip(request))
+    user, issued = await auth.register(body.username, body.password, client_ip(request))
     return AuthOut.build(user, issued)
 
 
-@public_router.post("/login", response_model=AuthOut)
+@public_router.post("/login", response_model=AuthOut, dependencies=[Depends(limit_per_ip("login"))])
 async def login(body: LoginRequest, request: Request, auth: AuthService = Depends(get_auth_service)):
-    user, issued = await auth.login(body.username, body.password, _client_ip(request))
+    user, issued = await auth.login(body.username, body.password, client_ip(request))
     return AuthOut.build(user, issued)
 
 

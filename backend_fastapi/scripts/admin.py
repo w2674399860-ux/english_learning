@@ -5,6 +5,7 @@
     venv\\Scripts\\python -m scripts.admin disable <用户名>
     venv\\Scripts\\python -m scripts.admin enable <用户名>
     venv\\Scripts\\python -m scripts.admin cleanup-sessions [--dry-run]
+    venv\\Scripts\\python -m scripts.admin cleanup-rate-limits [--dry-run]
 
 防误操作：
 - 执行前打印目标库（主机:端口/库名，不含密码）与目标用户当前状态
@@ -28,6 +29,7 @@ from app.auth.service import AuthService
 from app.core.config import settings
 from app.db.session import DatabaseConfigError, make_engine
 from app.models.user import User
+from app.ratelimit import limiter
 from app.schemas.common import to_utc_iso
 
 
@@ -97,6 +99,15 @@ async def _run(args) -> int:
                 print(f"已删除 {removed} 个会话")
                 return 0
 
+            if args.command == "cleanup-rate-limits":
+                count = await limiter.count_expired(session)
+                if args.dry_run:
+                    print(f"[dry-run] 将删除 {count} 条超过 2 天的限流计数")
+                    return 0
+                removed = await limiter.cleanup(session)
+                print(f"已删除 {removed} 条限流计数")
+                return 0
+
             name = normalize_login_username(args.username)
             user = await session.scalar(select(User).where(User.username == name)) if name else None
             if user is None:
@@ -137,6 +148,8 @@ def main(argv=None) -> int:
         sub.add_parser(name, help=help_).add_argument("username")
     cleanup = sub.add_parser("cleanup-sessions", help="清理过期或已撤销超过 7 天的会话")
     cleanup.add_argument("--dry-run", action="store_true")
+    rl_cleanup = sub.add_parser("cleanup-rate-limits", help="清理超过 2 天的限流计数")
+    rl_cleanup.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     try:
         return asyncio.run(_run(args))

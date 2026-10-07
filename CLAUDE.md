@@ -77,7 +77,7 @@
 
 **只在本地运行。** 线上服务器已下线，本阶段不做任何服务器部署（见第 10 节）。
 
-- 后端启动命令与端口以第二阶段记录为准（`backend_fastapi/` 下 `python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload`），**不要猜命令**。
+- 后端启动命令与端口以第二阶段记录为准（`backend_fastapi/` 下 `python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload --no-proxy-headers`），**不要猜命令**。`--no-proxy-headers`（S-5 起）：uvicorn 默认信任来自 127.0.0.1 的 `X-Forwarded-For`，会让按 IP 的限流被伪造请求头绕过。
 - **Python 统一用 `backend_fastapi\venv` 的 3.13**（系统 Python 是 3.14，不用）：本文件中所有 `python` 命令一律指 `venv\Scripts\python`（PowerShell）/ `venv/Scripts/python.exe`（Git Bash）；E-2 的基础镜像也用 3.13。
 - 本机是 Windows。命令必须说明适用的 shell（PowerShell / Git Bash），临时环境变量覆盖不得残留到后续命令。
 - Git Bash 中 `curl -d` 直接写中文会因编码导致 400：请求体写进 UTF-8 文件用 `--data-binary @文件` 发送，或改用脚本。
@@ -509,7 +509,7 @@ Skills 目录：`D:\all_project\English_Vocab02\english_learning_app\skills`（�
 ## 10. 上线前清单（本阶段不做，只维护状态）
 
 - [ ] **HTTPS**：域名、反向代理（Nginx / Caddy）、证书。服务器在中国大陆的，域名需完成 ICP 备案
-- [ ] 反向代理后正确获取客户端 IP（S-5 的 `X-Forwarded-For` 信任配置）
+- [ ] 反向代理后正确获取客户端 IP（S-5）：代理用连接地址**覆盖** `X-Forwarded-For`（Nginx：`proxy_set_header X-Forwarded-For $remote_addr;`），后端改为 `--proxy-headers --forwarded-allow-ips=<代理地址>`；否则全站共用一个登录 / 注册额度
 - [ ] 生产配置：`ocr_mode=docker`、`ai_fallback_enabled=false`、CORS 白名单为正式域名
 - [ ] 前端 release 构建使用正式域名的 HTTPS 地址（`--dart-define`）
 - [ ] 生产 MySQL：版本 8.4、账号权限拆分（迁移账号与运行账号）、端口不对公网开放

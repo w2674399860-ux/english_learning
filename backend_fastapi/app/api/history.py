@@ -1,16 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.input_limits import check_word_list
 from app.auth.dependencies import CurrentUser, get_current_user
+from app.core.config import settings
 from app.db.session import get_session
 from app.models.history import HistoryModel
 from app.schemas.history import RecordOut, RecordPage, SaveRecordRequest, UpdateRecordRequest
 
 router = APIRouter()
 
-# 输入上限（CLAUDE.md 第 9 节 S3 与 D-1 方案），超限返回 422
+# 输入上限（CLAUDE.md 第 9 节 S3 与 D-1 方案），超限返回 422。page_size 上限可配置（HISTORY_MAX_PAGE_SIZE）
 MAX_PAGE = 10_000
-MAX_PAGE_SIZE = 50
+MAX_PAGE_SIZE = settings.history_max_page_size
 MAX_SEARCH_LENGTH = 100
 
 
@@ -23,6 +25,7 @@ def get_history_model(
 
 @router.post("/save")
 async def save_record(request: SaveRecordRequest, history: HistoryModel = Depends(get_history_model)):
+    check_word_list(request.words)
     record_id = await history.save(request)
     return {"id": record_id, "message": "Record saved successfully"}
 

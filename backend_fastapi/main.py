@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.api.router import api_router
+from app.core.body_limit import BodySizeLimitMiddleware
 from app.db.session import dispose_engine
 
 logger = logging.getLogger("app")
@@ -17,28 +18,34 @@ logger = logging.getLogger("app")
 SESSION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 
 
-async def _cleanup_sessions_once() -> None:
+async def _cleanup_once() -> None:
+    """清理过期会话与过期限流计数（S-5）。两项互不影响，失败不影响服务启动。"""
     from app.auth.service import AuthService
     from app.db.session import get_engine, get_session
+    from app.ratelimit import limiter
 
-    try:
-        get_engine()
-        async for session in get_session():
-            removed = await AuthService(session).cleanup_sessions()
-            logger.info("session cleanup: removed %d expired/revoked sessions", removed)
-    except Exception as e:  # 清理失败不影响服务启动
-        logger.warning("session cleanup failed: %s", type(e).__name__)
+    for name, job in (
+        ("session", lambda s: AuthService(s).cleanup_sessions()),
+        ("rate limit counter", lambda s: limiter.cleanup(s)),
+    ):
+        try:
+            get_engine()
+            async for session in get_session():
+                removed = await job(session)
+                logger.info("%s cleanup: removed %d expired rows", name, removed)
+        except Exception as e:
+            logger.warning("%s cleanup failed: %s", name, type(e).__name__)
 
 
-async def _cleanup_sessions_forever() -> None:
+async def _cleanup_forever() -> None:
     while True:
-        await _cleanup_sessions_once()
+        await _cleanup_once()
         await asyncio.sleep(SESSION_CLEANUP_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(_cleanup_sessions_forever()) if settings.session_cleanup_enabled else None
+    task = asyncio.create_task(_cleanup_forever()) if settings.session_cleanup_enabled else None
     yield
     if task is not None:
         task.cancel()
@@ -62,6 +69,8 @@ app = FastAPI(
     **docs_options(settings.api_docs_enabled),
 )
 
+# 请求体大小上限（S-5）：先于路由与鉴权。加在 CORS 之前，使 413 响应也带 CORS 头
+app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -114,10 +123,17 @@ async def serve_flutter(full_path: str):
     return {"message": "AI English Learning API"}
 
 
-if __name__ == "__main__":
+def run() -> None:
     uvicorn.run(
         "main:app",
         host=settings.server_host,
         port=settings.server_port,
         reload=settings.debug,
+        # 不信任 X-Forwarded-For（uvicorn 默认信任来自 127.0.0.1 的代理头）。
+        # 部署到反向代理后改为 proxy_headers=True 并设置 forwarded_allow_ips=<代理地址>（CLAUDE.md 第 10 节）
+        proxy_headers=False,
     )
+
+
+if __name__ == "__main__":
+    run()

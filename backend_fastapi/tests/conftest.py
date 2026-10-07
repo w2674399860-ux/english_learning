@@ -70,6 +70,9 @@ os.environ.update({
     # 测试中开启接口文档（S-1 测试要访问 /docs）；关闭会话定时清理，避免后台任务干扰测试库
     "API_DOCS_ENABLED": "true",
     "SESSION_CLEANUP_ENABLED": "false",
+    # 限流默认关闭：不连库的测试不能因为计数去访问数据库。S-5 的测试用 fixture 打开并收紧额度；
+    # 路由是否挂了限流依赖由 tests/unit/test_ratelimit_rules.py 清点，关掉开关也藏不住漏挂
+    "RATE_LIMIT_ENABLED": "false",
 })
 
 import app.api.learn as learn_api  # noqa: E402
@@ -224,12 +227,20 @@ def client():
     """
     from fastapi.testclient import TestClient
 
+    from app.db.session import get_session
+
+    async def no_database():
+        # 限流依赖需要会话参数；限流关闭时不会使用它，这里不创建 engine
+        yield None
+
     fastapi_app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    fastapi_app.dependency_overrides[get_session] = no_database
     try:
         with TestClient(fastapi_app) as c:
             yield c
     finally:
         fastapi_app.dependency_overrides.pop(get_current_user, None)
+        fastapi_app.dependency_overrides.pop(get_session, None)
 
 
 @pytest.fixture(autouse=True)
@@ -272,7 +283,8 @@ def use_ocr(monkeypatch, make_ocr_service):
 #    - 每个测试开始前清空业务表，测试之间互不影响
 # ---------------------------------------------------------------------------
 # 按外键依赖的反方向清空
-DATA_TABLES = ("learning_records", "sessions", "users")
+DATA_TABLES = ("learning_records", "sessions", "users", "rate_limit_counters")
+_NO_AUTO_INCREMENT = {"rate_limit_counters"}
 DEFAULT_PASSWORD = "river-stone-42"
 
 
@@ -300,7 +312,8 @@ async def _truncate(engine):
     async with engine.begin() as conn:
         for table in DATA_TABLES:
             await conn.execute(text(f"DELETE FROM {table}"))
-            await conn.execute(text(f"ALTER TABLE {table} AUTO_INCREMENT = 1"))
+            if table not in _NO_AUTO_INCREMENT:
+                await conn.execute(text(f"ALTER TABLE {table} AUTO_INCREMENT = 1"))
 
 
 @pytest.fixture(scope="session")
