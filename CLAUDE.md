@@ -83,6 +83,7 @@
 - Git Bash 中 `curl -d` 直接写中文会因编码导致 400：请求体写进 UTF-8 文件用 `--data-binary @文件` 发送，或改用脚本。
 - 有系统代理时，在**启动后端的 shell 里**设置 `NO_PROXY=localhost,127.0.0.1`（写进 `.env` 无效）。
 - 本地日常开发配置：`OCR_MODE=auto` 或 `docker`、`AI_FALLBACK_ENABLED=true`、`OCR_SERVICE_URL=http://localhost:8866`。
+- Web 调试（S-3a 起）：`flutter run -d chrome --web-port 5000`，固定端口以匹配 CORS 白名单；后端 `.env` 设 `CORS_ALLOW_ORIGINS=http://localhost:5000,http://127.0.0.1:5000`。CORS 默认不放行任何来源。
 
 ### 数据库（D-1 起生效）
 

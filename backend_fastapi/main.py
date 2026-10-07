@@ -54,6 +54,27 @@ async def lifespan(app: FastAPI):
     await dispose_engine()
 
 
+def cors_options(origins: list[str]) -> dict:
+    """CORS 白名单（S-3a）。凭证只走 Authorization 头、不用 Cookie，所以不开 allow_credentials。
+
+    方法与请求头只放行前端实际用到的；新增请求头时要同步加到 allow_headers。
+    暴露 Retry-After，跨域时前端才能读到 429 的等待时间（S-5）。
+    """
+    return {
+        "allow_origins": origins,
+        "allow_credentials": False,
+        "allow_methods": ["GET", "POST", "PUT", "DELETE"],
+        "allow_headers": ["Authorization", "Content-Type"],
+        "expose_headers": ["Retry-After"],
+        "max_age": 600,
+    }
+
+
+def warn_deprecated_settings() -> None:
+    if settings.frontend_url is not None:
+        logger.warning("FRONTEND_URL is deprecated and has no effect; use CORS_ALLOW_ORIGINS and remove it from .env")
+
+
 def docs_options(enabled: bool) -> dict:
     """API_DOCS_ENABLED 关闭时不注册 /docs、/redoc、/openapi.json（生产默认关闭）。"""
     if enabled:
@@ -71,13 +92,8 @@ app = FastAPI(
 
 # 请求体大小上限（S-5）：先于路由与鉴权。加在 CORS 之前，使 413 响应也带 CORS 头
 app.add_middleware(BodySizeLimitMiddleware)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-    max_age=0,
-)
+app.add_middleware(CORSMiddleware, **cors_options(settings.cors_origins))
+warn_deprecated_settings()
 
 app.include_router(api_router)
 

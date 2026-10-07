@@ -53,6 +53,7 @@ if TEST_DATABASE_URL:
 TEST_API_KEY = "test-key-not-real"
 DEEPSEEK_BASE = "https://deepseek.test"
 OCR_BASE = "http://ocr.test"
+CORS_TEST_ORIGIN = "http://localhost:5000"
 
 os.environ.update({
     "DEEPSEEK_API_KEY": TEST_API_KEY,
@@ -65,7 +66,8 @@ os.environ.update({
     "DEBUG": "false",
     "OCR_SERVICE_URL": OCR_BASE,
     "OCR_MODE": "docker",
-    "FRONTEND_URL": "http://localhost:3000",
+    # CORS 中间件在导入 main 时按配置构建，白名单必须在这里给出（S-3a）
+    "CORS_ALLOW_ORIGINS": CORS_TEST_ORIGIN,
     "SESSION_TTL_DAYS": "30",
     # 测试中开启接口文档（S-1 测试要访问 /docs）；关闭会话定时清理，避免后台任务干扰测试库
     "API_DOCS_ENABLED": "true",

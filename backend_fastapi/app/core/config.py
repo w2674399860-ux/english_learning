@@ -1,6 +1,32 @@
-from pydantic import Field
-from pydantic_settings import BaseSettings
+import re
 from typing import Literal, Optional
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings
+
+# scheme://主机[:端口]；主机为域名 / IPv4 或带方括号的 IPv6
+_ORIGIN_RE = re.compile(r"^(https?)://(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::(\d{1,5}))?$", re.IGNORECASE)
+
+
+def parse_cors_origins(raw: str) -> list[str]:
+    """逗号分隔的来源 → 去重后的列表（转小写）。不合格时抛 ValueError，指出是哪一项。
+
+    浏览器发出的 Origin 只有 scheme://主机[:端口]，带路径或结尾 / 的写法永远匹配不上，所以直接拒绝；不支持 *。
+    """
+    origins: list[str] = []
+    for item in (part.strip() for part in raw.split(",")):
+        if not item:
+            continue
+        match = _ORIGIN_RE.match(item)
+        if not match or (match.group(3) and int(match.group(3)) > 65535):
+            raise ValueError(
+                f"CORS_ALLOW_ORIGINS 中的 {item!r} 不合法：格式为 http(s)://主机[:端口]，"
+                "不带路径和结尾的 /，不支持 *"
+            )
+        origin = item.lower()
+        if origin not in origins:
+            origins.append(origin)
+    return origins
 
 
 class Settings(BaseSettings):
@@ -55,8 +81,21 @@ class Settings(BaseSettings):
     max_request_bytes: int = Field(1024 * 1024, ge=1)  # 其他 /api/ 接口
     history_max_page_size: int = Field(50, ge=1)
 
-    # CORS
-    frontend_url: str = "http://localhost:3000"
+    # CORS 白名单（S-3a）：逗号分隔，默认为空 = 不允许任何跨域来源。
+    # 生产环境 Web 由后端同源托管、移动端 App 不受 CORS 限制，都不需要；本地 flutter run -d chrome 时在 .env 中设置
+    cors_allow_origins: str = ""
+    # 已废弃（从未生效）：保留字段只为兼容仍写着它的 .env（未定义的键会让启动失败），启动时警告；收尾时删除
+    frontend_url: Optional[str] = None
+
+    @field_validator("cors_allow_origins")
+    @classmethod
+    def _validate_cors_allow_origins(cls, value: str) -> str:
+        parse_cors_origins(value)
+        return value
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return parse_cors_origins(self.cors_allow_origins)
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
