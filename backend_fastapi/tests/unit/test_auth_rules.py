@@ -29,7 +29,7 @@ def test_invalid_usernames_are_rejected(raw):
     with pytest.raises(AuthRuleError) as exc:
         validate_username(raw)
     assert exc.value.status_code == 422
-    assert exc.value.detail == "用户名需为 3~20 位字母、数字或下划线"
+    assert exc.value.detail == "用户名需为 3–20 位字母、数字或下划线"
 
 
 # ---- 密码 -------------------------------------------------------------------

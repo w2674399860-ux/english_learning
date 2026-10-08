@@ -27,7 +27,7 @@ def save(client, **overrides):
 def test_crud_roundtrip(alice_client):
     resp = alice_client.post(f"{BASE}/save", json=PAYLOAD)
     assert resp.status_code == 200
-    assert resp.json() == {"id": resp.json()["id"], "message": "Record saved successfully"}
+    assert resp.json() == {"id": resp.json()["id"], "message": "已保存"}
     rec_id = resp.json()["id"]
 
     rec = alice_client.get(f"{BASE}/records/{rec_id}").json()
@@ -113,7 +113,7 @@ def test_list_boundary_params_are_ok(alice_client, params):
 def test_missing_record_is_404(alice_client, method):
     resp = getattr(alice_client, method)(f"{BASE}/records/999999")
     assert resp.status_code == 404
-    assert resp.json() == {"detail": "Record not found"}
+    assert resp.json() == {"detail": "记录不存在"}
 
 
 def test_update_missing_record_is_404(alice_client):

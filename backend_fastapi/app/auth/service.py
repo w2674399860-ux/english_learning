@@ -21,8 +21,8 @@ logger = logging.getLogger("app.auth")
 INVALID_CREDENTIALS = "用户名或密码错误"
 ACCOUNT_DISABLED = "账号已停用，请联系管理员"
 USERNAME_TAKEN = "用户名已被注册"
-WRONG_OLD_PASSWORD = "原密码不正确"
-SAME_PASSWORD = "新密码不能与原密码相同"
+WRONG_OLD_PASSWORD = "当前密码不正确"
+SAME_PASSWORD = "新密码不能与当前密码相同"
 
 # 过期或已撤销超过这个时长的会话会被清理
 SESSION_RETENTION = timedelta(days=7)

@@ -66,7 +66,7 @@ def test_user_cannot_read_update_or_delete_others_record(db_client, two_users):
         db_client.delete(f"{H}/records/{rid}", headers=a),
     ):
         assert resp.status_code == 404
-        assert resp.json() == {"detail": "Record not found"}
+        assert resp.json() == {"detail": "记录不存在"}
 
     rec = db_client.get(f"{H}/records/{rid}", headers=two_users["bob"]).json()
     assert rec["is_favorite"] == 0 and rec["notes"] is None

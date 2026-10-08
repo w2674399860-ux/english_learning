@@ -4,7 +4,7 @@ import pytest
 from conftest import OCR_BASE, raiser, tiny_png
 
 URL = "/api/v1/ocr/recognize"
-OCR_DETAIL = "OCR service is unavailable. Please try again later."
+OCR_DETAIL = "识别服务暂时不可用，请稍后再试"
 
 FAILURES = {
     "connect_error": raiser(httpx.ConnectError),
@@ -63,7 +63,7 @@ def test_non_image_is_400(client, upstream, use_ocr, content_type):
     use_ocr("docker")
     resp = upload(client, b"hello", content_type)
     assert resp.status_code == 400
-    assert resp.json() == {"detail": "Only image files are allowed"}
+    assert resp.json() == {"detail": "只能上传图片文件"}
     assert upstream.requests == []
 
 

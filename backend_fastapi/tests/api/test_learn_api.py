@@ -18,11 +18,11 @@ def story_then_blanks():
 
 # reason → (上游处理函数, HTTP 状态码, detail)；api_key=None 表示用默认测试 Key
 ERRORS = {
-    "ai_not_configured": (None, 503, "AI service is not configured."),
-    "ai_unavailable": (raiser(httpx.ConnectError), 503, "AI service is unavailable. Please try again later."),
-    "ai_timeout": (raiser(httpx.ReadTimeout), 504, "AI service timed out. Please try again."),
-    "ai_upstream_error": (lambda r: httpx.Response(500), 502, "AI service returned an error. Please try again later."),
-    "ai_parse_failed": (lambda r: deepseek_reply("not json"), 502, "AI returned an invalid response. Please try again."),
+    "ai_not_configured": (None, 503, "生成服务未配置，请联系管理员"),
+    "ai_unavailable": (raiser(httpx.ConnectError), 503, "生成服务暂时不可用，请稍后再试"),
+    "ai_timeout": (raiser(httpx.ReadTimeout), 504, "生成超时，请重试"),
+    "ai_upstream_error": (lambda r: httpx.Response(500), 502, "生成服务出错，请稍后再试"),
+    "ai_parse_failed": (lambda r: deepseek_reply("not json"), 502, "生成结果有误，请重试"),
 }
 
 
@@ -123,5 +123,5 @@ def test_empty_words_is_400(client, upstream, use_ai):
     use_ai()
     resp = client.post(URL, json={"words": []})
     assert resp.status_code == 400
-    assert resp.json() == {"detail": "Words list cannot be empty"}
+    assert resp.json() == {"detail": "请至少选择一个单词"}
     assert upstream.requests == []

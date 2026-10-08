@@ -27,7 +27,7 @@ def get_history_model(
 async def save_record(request: SaveRecordRequest, history: HistoryModel = Depends(get_history_model)):
     check_word_list(request.words)
     record_id = await history.save(request)
-    return {"id": record_id, "message": "Record saved successfully"}
+    return {"id": record_id, "message": "已保存"}
 
 
 @router.get("/records", response_model=RecordPage)
@@ -50,7 +50,7 @@ async def get_records(
 async def get_record(record_id: int, history: HistoryModel = Depends(get_history_model)):
     record = await history.get_by_id(record_id)
     if not record:
-        raise HTTPException(status_code=404, detail="Record not found")
+        raise HTTPException(status_code=404, detail="记录不存在")
     return RecordOut.from_record(record)
 
 
@@ -60,13 +60,13 @@ async def update_record(
 ):
     success = await history.update(record_id, request)
     if not success:
-        raise HTTPException(status_code=404, detail="Record not found")
-    return {"message": "Record updated successfully"}
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return {"message": "已更新"}
 
 
 @router.delete("/records/{record_id}")
 async def delete_record(record_id: int, history: HistoryModel = Depends(get_history_model)):
     success = await history.delete(record_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Record not found")
-    return {"message": "Record deleted successfully"}
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return {"message": "已删除"}

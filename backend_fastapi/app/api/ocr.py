@@ -17,7 +17,7 @@ class OcrResponse(DegradableResponse):
 @router.post("/recognize", response_model=OcrResponse, dependencies=[Depends(limit_per_user("ocr"))])
 async def recognize_text(file: UploadFile = File(...)):
     if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image files are allowed")
+        raise HTTPException(status_code=400, detail="只能上传图片文件")
 
     image_data = await file.read()
     try:

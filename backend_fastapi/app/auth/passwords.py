@@ -16,7 +16,7 @@ PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
 MAX_CONCURRENT_HASHES = 4
 
-USERNAME_RULE = "用户名需为 3~20 位字母、数字或下划线"
+USERNAME_RULE = "用户名需为 3–20 位字母、数字或下划线"
 
 # 常见弱密码（不区分大小写）。短于 8 位的已被长度规则拒绝，不列入
 COMMON_PASSWORDS = frozenset({

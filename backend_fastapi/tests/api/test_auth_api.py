@@ -61,8 +61,8 @@ def test_duplicate_username_is_case_insensitive(db_client, second):
 
 
 @pytest.mark.parametrize("payload, detail", [
-    ({"username": "ab", "password": DEFAULT_PASSWORD}, "用户名需为 3~20 位字母、数字或下划线"),
-    ({"username": "аlice", "password": DEFAULT_PASSWORD}, "用户名需为 3~20 位字母、数字或下划线"),
+    ({"username": "ab", "password": DEFAULT_PASSWORD}, "用户名需为 3–20 位字母、数字或下划线"),
+    ({"username": "аlice", "password": DEFAULT_PASSWORD}, "用户名需为 3–20 位字母、数字或下划线"),
     ({"username": "alice", "password": "short"}, "密码至少 8 位"),
     ({"username": "alice", "password": "x" * 129}, "密码不能超过 128 位"),
     ({"username": "alice_pw", "password": "ALICE_PW"}, "密码不能与用户名相同"),
@@ -235,8 +235,8 @@ def test_change_password_revokes_all_old_tokens(db_client):
 
 
 @pytest.mark.parametrize("payload, status, detail", [
-    ({"old_password": "wrong-old-pass", "new_password": "brand-new-pass-7"}, 400, "原密码不正确"),
-    ({"old_password": DEFAULT_PASSWORD, "new_password": DEFAULT_PASSWORD}, 422, "新密码不能与原密码相同"),
+    ({"old_password": "wrong-old-pass", "new_password": "brand-new-pass-7"}, 400, "当前密码不正确"),
+    ({"old_password": DEFAULT_PASSWORD, "new_password": DEFAULT_PASSWORD}, 422, "新密码不能与当前密码相同"),
     ({"old_password": DEFAULT_PASSWORD, "new_password": "short"}, 422, "密码至少 8 位"),
     ({"old_password": DEFAULT_PASSWORD, "new_password": "alice"}, 422, "密码至少 8 位"),
     ({"old_password": DEFAULT_PASSWORD, "new_password": "qwerty123"}, 422, "密码过于简单，请换一个"),

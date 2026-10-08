@@ -28,7 +28,7 @@ class ComposeResponse(DegradableResponse):
 async def compose(request: ComposeRequest):
     """用确认后的词表一次生成短文、中译与中英文填空。"""
     if not request.words:
-        raise HTTPException(status_code=400, detail="Words list cannot be empty")
+        raise HTTPException(status_code=400, detail="请至少选择一个单词")
     check_word_list(request.words)
 
     try:

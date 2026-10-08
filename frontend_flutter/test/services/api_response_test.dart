@@ -45,14 +45,8 @@ void main() {
 
   group('errorMessage', () {
     test('优先使用后端 detail', () {
-      final e = _dioError(
-        statusCode: 503,
-        data: {'detail': 'AI service is unavailable. Please try again later.'},
-      );
-      expect(
-        errorMessage(e),
-        'AI service is unavailable. Please try again later.',
-      );
+      final e = _dioError(statusCode: 503, data: {'detail': '生成服务暂时不可用，请稍后再试'});
+      expect(errorMessage(e), '生成服务暂时不可用，请稍后再试');
     });
 
     test('detail 为数组（校验错误）时显示通用文案', () {
@@ -109,7 +103,10 @@ void main() {
         DioExceptionType.sendTimeout,
         DioExceptionType.receiveTimeout,
       ]) {
-        expect(classifyFlowError(_dioError(type: type)), FlowErrorKind.retryable);
+        expect(
+          classifyFlowError(_dioError(type: type)),
+          FlowErrorKind.retryable,
+        );
       }
       for (final status in [500, 502, 503, 504]) {
         expect(
@@ -131,7 +128,10 @@ void main() {
     });
 
     test('非 Dio 异常（如读取图片失败）按可重试处理', () {
-      expect(classifyFlowError(const FormatException('x')), FlowErrorKind.retryable);
+      expect(
+        classifyFlowError(const FormatException('x')),
+        FlowErrorKind.retryable,
+      );
     });
   });
 }
