@@ -5,7 +5,6 @@
         android:label="AI 英语学习"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:fullBackupContent="false">
         

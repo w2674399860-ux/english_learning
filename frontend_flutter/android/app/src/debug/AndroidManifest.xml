@@ -4,4 +4,9 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- S-3b：只有 debug 构建允许明文 HTTP，便于连本地后端（模拟器 10.0.2.2、adb reverse 的 localhost、
+         局域网 IP）。main 中不声明，targetSdk 28 以上默认禁止，release / profile 构建因此禁止明文。
+         注意：这只约束系统原生网络；Dart 自己的 HttpClient（Dio）不受它约束，
+         release 构建对后端地址的 https 要求见 lib/config/api_config.dart。 -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

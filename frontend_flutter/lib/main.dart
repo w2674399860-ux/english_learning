@@ -7,6 +7,7 @@ import 'auth/auth_api.dart';
 import 'auth/auth_interceptor.dart';
 import 'auth/session.dart';
 import 'auth/token_store.dart';
+import 'config/api_config.dart';
 import 'dev/component_gallery.dart';
 import 'l10n/l10n.dart';
 import 'pages/auth/auth_gate.dart';
@@ -22,6 +23,8 @@ const bool _showGallery = bool.fromEnvironment('SHOW_GALLERY');
 final ThemeData _appTheme = buildAppTheme();
 
 void main() {
+  // S-3b：移动端 release 构建的后端地址不是 https 时直接失败
+  ApiConfig.ensureSecureBaseUrl();
   _registerFontLicenses();
   runApp(const MyApp());
 }
