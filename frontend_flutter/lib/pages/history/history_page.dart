@@ -2,13 +2,49 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/app_provider.dart';
+import '../../l10n/l10n.dart';
 import '../../models/learning_record.dart';
+import '../../providers/app_provider.dart';
+import '../../theme/theme_x.dart';
+import '../../widgets/confirm_dialog.dart';
+import '../../widgets/error_notice.dart';
 import '../../widgets/history_list_parts.dart';
+import '../../widgets/history_record_card.dart';
+import '../../widgets/illustration.dart';
+import '../../widgets/ink_toast.dart';
+import '../../widgets/page_scaffold.dart';
+import '../../widgets/state_view.dart';
+import '../auth/account_actions.dart';
 import 'history_detail_page.dart';
 
+/// 历史列表主体显示哪一种状态。
+enum HistoryBodyState { loading, loadFailed, empty, noMatch, list }
+
+/// 选择历史列表主体的状态（纯函数）。
+/// 遗留问题 #12：没有记录且加载失败时是 [HistoryBodyState.loadFailed]，
+/// 不再落到"还没有记录"，免得用户误以为真的没有记录。
+HistoryBodyState historyBodyState({
+  required bool isLoading,
+  required bool hasRecords,
+  required String? error,
+  required String query,
+}) {
+  if (isLoading) return HistoryBodyState.loading;
+  if (hasRecords) return HistoryBodyState.list;
+  if (error != null) return HistoryBodyState.loadFailed;
+  return query.isEmpty ? HistoryBodyState.empty : HistoryBodyState.noMatch;
+}
+
+/// 历史列表（设计稿 ai_4）：搜索、记录卡片、加载更多、删除。
+///
+/// 状态：首次加载中；没有记录（引导去拍照）；搜索无结果（清空搜索）；
+/// 加载失败且没有记录（只显示错误条与"重试"，不再同时显示"还没有记录"——遗留问题 #12）；
+/// 加载更多失败 / 删除失败（错误条在列表上方，列表保留）；加载更多中；全部加载完；删除确认。
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key});
+  const HistoryPage({super.key, this.onGoHome});
+
+  /// 空状态"去拍照"：切到首页 Tab。由 MainScreen 提供。
+  final VoidCallback? onGoHome;
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();
@@ -56,96 +92,164 @@ class _HistoryPageState extends State<HistoryPage> {
     _searchNow('');
   }
 
-  void _confirmDelete(BuildContext context, LearningRecord record) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Record'),
-        content: Text('Are you sure you want to delete this record${record.words.isNotEmpty ? " (${record.words.join(", ")})" : ""}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              if (record.id != null) {
-                context.read<AppProvider>().deleteRecord(record.id!);
-              }
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+  Future<void> _confirmDelete(LearningRecord record) async {
+    final l10n = context.l10n;
+    final provider = context.read<AppProvider>();
+    // 只列前 3 个单词（U-10 I-b）
+    final words = record.words;
+    final message = words.isEmpty
+        ? l10n.deleteDialogBody
+        : '${l10n.deleteDialogBody}\n'
+              '${l10n.deleteDialogWords(words.take(3).join('、'), words.length)}';
+
+    final confirmed = await showConfirmDialog(
+      context,
+      title: l10n.deleteDialogTitle,
+      message: message,
+      confirmLabel: l10n.deleteDialogConfirm,
+    );
+    if (!confirmed || record.id == null || !mounted) return;
+
+    await provider.deleteRecord(record.id!);
+    // 删除成功与否由删除后有没有错误判断（AppProvider 不改）；失败时列表上方显示错误条
+    if (mounted && provider.historyError == null) {
+      showInkToast(context, l10n.historyDeleted);
+    }
+  }
+
+  void _openDetail(LearningRecord record) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => HistoryDetailPage(record: record)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('History')),
-      body: Consumer<AppProvider>(
-        builder: (context, provider, _) {
-          final error = provider.historyError;
+    final tokens = context.tokens;
+    final c = context.colors;
+    final l10n = context.l10n;
+    final provider = context.watch<AppProvider>();
+    final error = provider.historyError;
+    final hasRecords = provider.records.isNotEmpty;
 
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: _buildSearchField(),
-              ),
-              if (error != null) _HistoryErrorText(message: error),
-              Expanded(child: _buildList(context, provider)),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSearchField() {
-    return ValueListenableBuilder<TextEditingValue>(
-      valueListenable: _searchController,
-      builder: (context, value, _) => TextField(
-        controller: _searchController,
-        textInputAction: TextInputAction.search,
-        decoration: InputDecoration(
-          hintText: 'Search words or English story',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: value.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.clear),
-                  tooltip: 'Clear search',
-                  onPressed: _clearSearch,
-                ),
-          isDense: true,
-          border: const OutlineInputBorder(),
+    return PageScaffold(
+      appBar: AppBar(
+        title: Text(l10n.historyTitle, style: context.text.titleLarge),
+        leading: Padding(
+          padding: EdgeInsets.all(tokens.spaceSm),
+          child: ExcludeSemantics(
+            child: Image.asset(
+              IllustrationKind.mascot.asset,
+              width: tokens.avatarSize,
+              height: tokens.avatarSize,
+            ),
+          ),
         ),
-        onChanged: _onSearchChanged,
-        onSubmitted: _searchNow,
+        actions: const [AccountActions()],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              tokens.pageMargin,
+              tokens.spaceLg,
+              tokens.pageMargin,
+              0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                HistorySearchField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  onSubmitted: _searchNow,
+                  onClear: _clearSearch,
+                ),
+                SizedBox(height: tokens.spaceMd),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.lightbulb,
+                      size: tokens.iconSm,
+                      color: c.tertiary,
+                    ),
+                    SizedBox(width: tokens.spaceXs),
+                    Expanded(
+                      child: Text(
+                        l10n.historySearchTip,
+                        style: context.text.labelSmall?.copyWith(
+                          color: c.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    if (hasRecords && !provider.isLoadingHistory)
+                      _TotalBadge(total: provider.historyTotal),
+                  ],
+                ),
+                if (error != null && hasRecords) ...[
+                  SizedBox(height: tokens.spaceMd),
+                  ErrorNotice(message: error),
+                ],
+              ],
+            ),
+          ),
+          Expanded(child: _buildBody(provider)),
+        ],
       ),
     );
   }
 
-  Widget _buildList(BuildContext context, AppProvider provider) {
-    if (provider.isLoadingHistory) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (provider.records.isEmpty) {
-      return HistoryEmptyState(
-        query: provider.historyQuery,
-        onClearSearch: _clearSearch,
-      );
-    }
+  Widget _buildBody(AppProvider provider) {
+    final tokens = context.tokens;
+    final l10n = context.l10n;
 
     final records = provider.records;
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
+    final state = historyBodyState(
+      isLoading: provider.isLoadingHistory,
+      hasRecords: records.isNotEmpty,
+      error: provider.historyError,
+      query: provider.historyQuery,
+    );
+    switch (state) {
+      case HistoryBodyState.loading:
+        return StateView(
+          illustration: IllustrationKind.mascot,
+          title: l10n.historyLoadingMore,
+          isLoading: true,
+        );
+      case HistoryBodyState.loadFailed:
+        return Padding(
+          padding: EdgeInsets.all(tokens.pageMargin),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ErrorNotice(
+              message: provider.historyError!,
+              onRetry: provider.loadRecords,
+            ),
+          ),
+        );
+      case HistoryBodyState.empty:
+      case HistoryBodyState.noMatch:
+        return HistoryEmptyState(
+          query: provider.historyQuery,
+          onClearSearch: _clearSearch,
+          onGoHome: widget.onGoHome,
+        );
+      case HistoryBodyState.list:
+        break;
+    }
+
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(
+        tokens.pageMargin,
+        tokens.spaceXl,
+        tokens.pageMargin,
+        tokens.pageMargin,
+      ),
       itemCount: records.length + 1,
+      separatorBuilder: (_, _) => SizedBox(height: tokens.spaceXl),
       itemBuilder: (context, index) {
         if (index == records.length) {
           return HistoryListFooter(
@@ -155,105 +259,42 @@ class _HistoryPageState extends State<HistoryPage> {
             onLoadMore: provider.loadMoreRecords,
           );
         }
-
         final record = records[index];
-        return _RecordCard(
+        return HistoryRecordCard(
           record: record,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => HistoryDetailPage(record: record),
-            ),
-          ),
-          onDelete: () => _confirmDelete(context, record),
+          index: index,
+          onTap: () => _openDetail(record),
+          onDelete: () => _confirmDelete(record),
         );
       },
     );
   }
 }
 
-class _RecordCard extends StatelessWidget {
-  final LearningRecord record;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
+/// "共 N 条"小徽章（Q-F8）。
+class _TotalBadge extends StatelessWidget {
+  const _TotalBadge({required this.total});
 
-  const _RecordCard({
-    required this.record,
-    required this.onTap,
-    required this.onDelete,
-  });
+  final int total;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 4, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      record.createdAt ?? '',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20),
-                    onPressed: onDelete,
-                    tooltip: 'Delete',
-                    color: Colors.red,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                record.englishStory,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 4,
-                children: record.words
-                    .map((w) => Chip(
-                          label: Text(w, style: const TextStyle(fontSize: 12)),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                        ))
-                    .toList(),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 历史加载 / 删除失败时显示在列表上方。
-class _HistoryErrorText extends StatelessWidget {
-  const _HistoryErrorText({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = context.tokens;
+    final c = context.colors;
     return Container(
-      width: double.infinity,
-      color: scheme.errorContainer,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Text(message, style: TextStyle(color: scheme.onErrorContainer)),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spaceMd,
+        vertical: tokens.spaceXxs,
+      ),
+      decoration: BoxDecoration(
+        color: c.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(tokens.radiusLg),
+        boxShadow: tokens.hardShadow(tokens.shadowSmall),
+      ),
+      child: Text(
+        context.l10n.historyTotal(total),
+        style: context.text.labelSmall?.copyWith(color: c.onSurfaceVariant),
+      ),
     );
   }
 }

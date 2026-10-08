@@ -17,4 +17,11 @@ class ApiConfig {
   static const String learnCompose = '$apiPrefix/learn/compose';
   static const String historySave = '$apiPrefix/history/save';
   static const String historyRecords = '$apiPrefix/history/records';
+
+  // 账号（A-2）
+  static const String authRegister = '$apiPrefix/auth/register';
+  static const String authLogin = '$apiPrefix/auth/login';
+  static const String authLogout = '$apiPrefix/auth/logout';
+  static const String authMe = '$apiPrefix/auth/me';
+  static const String authChangePassword = '$apiPrefix/auth/change-password';
 }

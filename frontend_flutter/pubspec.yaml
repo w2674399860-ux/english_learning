@@ -30,6 +30,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
+  # A-2：移动端凭证存储（Keychain / Android Keystore）。Web 端改用 sessionStorage，见 lib/auth/token_store_web.dart
+  flutter_secure_storage: ^11.2.0
 
   cupertino_icons: ^1.0.8
   dio: ^5.4.0
@@ -62,10 +67,21 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  # gen_l10n：根据 lib/l10n/app_zh.arb 生成 AppLocalizations（见 l10n.yaml）
+  generate: true
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    # PDF 导出用（pdf_export_service.dart）；界面上的中文字体见下方 fonts
     - assets/fonts/NotoSansSC-Regular.ttf
+    # 字体许可证，启动时登记到 LicenseRegistry
+    - assets/fonts/bricolage_grotesque/OFL.txt
+    - assets/fonts/plus_jakarta_sans/OFL.txt
+    - assets/fonts/noto_sans_sc/OFL.txt
+    # 插画（占位素材，来源与授权见 assets/images/SOURCES.md）
+    - assets/images/mascot_book.webp
+    - assets/images/illus_home.webp
+    - assets/images/illus_sad.webp
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -92,3 +108,17 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+  #
+  # 均为 SIL OFL 1.1，来自 github.com/google/fonts（ofl/ 目录），只改了文件名。
+  # 前两款是可变字体：字重由 TextStyle.fontVariations 指定（见 lib/theme/app_theme.dart）。
+  fonts:
+    - family: BricolageGrotesque
+      fonts:
+        - asset: assets/fonts/bricolage_grotesque/BricolageGrotesque-Variable.ttf
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/plus_jakarta_sans/PlusJakartaSans-Variable.ttf
+    # 只在 Web 上作为中文后备字体（移动端用系统中文字体），见 U-10 方案 I-d
+    - family: NotoSansSC
+      fonts:
+        - asset: assets/fonts/NotoSansSC-Regular.ttf

@@ -2,10 +2,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:label="english_learning_app"
+        android:label="AI 英语学习"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false">
         
         <activity
             android:name=".MainActivity"

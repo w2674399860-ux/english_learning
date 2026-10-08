@@ -1,0 +1,6 @@
+# gen_l10n 配置。只提供简体中文（CLAUDE.md 第 9 节 I1）；以后加语言只需补一份 ARB。
+arb-dir: lib/l10n
+template-arb-file: app_zh.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+nullable-getter: false

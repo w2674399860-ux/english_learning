@@ -1,11 +1,11 @@
 {
-    "name": "english_learning_app",
-    "short_name": "english_learning_app",
+    "name": "AI 英语学习",
+    "short_name": "AI 英语学习",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "拍照提取英文单词，生成短文与填空练习。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

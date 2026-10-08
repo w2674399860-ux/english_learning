@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import '../auth/auth_interceptor.dart';
 import '../config/api_config.dart';
 
 class ApiService {
@@ -15,6 +16,15 @@ class ApiService {
       receiveTimeout: const Duration(milliseconds: ApiConfig.receiveTimeout),
       headers: {'Content-Type': 'application/json'},
     ));
+  }
+
+  /// 与账号接口（DioAuthApi）共用同一个 Dio，凭证由同一个拦截器附加。
+  Dio get dio => _dio;
+
+  /// 挂上（或替换）鉴权拦截器。ApiService 是单例，重复调用不会叠加多个。
+  void setAuthInterceptor(AuthInterceptor interceptor) {
+    _dio.interceptors.removeWhere((i) => i is AuthInterceptor);
+    _dio.interceptors.add(interceptor);
   }
 
   // 恢复为 Map 返回类型，但在内部做了安全的 String-to-Map 兼容包装

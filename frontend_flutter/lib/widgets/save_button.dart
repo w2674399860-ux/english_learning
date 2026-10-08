@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// 学习结果页的保存按钮，三种状态：可保存 / 保存中 / 已保存。
+import '../l10n/l10n.dart';
+import 'ink_button.dart';
+
+/// 学习结果页顶栏右侧的保存按钮（设计稿 _1），三种状态：
+/// - 可保存：书签图标 +"保存"；
+/// - 保存中：进度圈 +"保存中"，不可点；
+/// - 已保存：对勾 +"已保存"，置灰不可再点（不像设计稿那样 2 秒后变回"保存"，避免重复保存）。
 class SaveButton extends StatelessWidget {
   const SaveButton({
     super.key,
@@ -15,31 +21,23 @@ class SaveButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isSaving) {
-      return const IconButton(
-        icon: SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-        // onPressed 为 null 时 IconButton 自动禁用并置灰
-        onPressed: null,
-        tooltip: 'Saving',
-      );
-    }
-
+    final l10n = context.l10n;
     if (isSaved) {
-      return const IconButton(
-        icon: Icon(Icons.check),
+      return InkButton(
+        label: l10n.saveButtonSaved,
+        leadingIcon: Icons.check,
+        variant: InkButtonVariant.lime,
+        compact: true,
         onPressed: null,
-        tooltip: 'Saved',
       );
     }
-
-    return IconButton(
-      icon: const Icon(Icons.save),
-      onPressed: onPressed,
-      tooltip: 'Save Record',
+    return InkButton(
+      label: l10n.saveButton,
+      leadingIcon: Icons.bookmark,
+      compact: true,
+      isLoading: isSaving,
+      loadingLabel: l10n.saveButtonSaving,
+      onPressed: isSaving ? null : onPressed,
     );
   }
 }

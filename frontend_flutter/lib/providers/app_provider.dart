@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
+import '../l10n/l10n.dart';
 import '../models/learning_record.dart';
 import '../services/api_response.dart';
 import '../services/api_service.dart';
@@ -7,14 +8,22 @@ import 'difficulty.dart';
 import 'flow_phase.dart';
 import 'history_paging.dart';
 
+/// 一次生成最多使用的单词数，与后端 compose_max_words 默认值一致（S-5）。
+const int maxWordsPerCompose = 20;
+
+/// 单个单词的最大长度，与后端 compose_max_word_length 默认值一致（S-5）。
+/// 按码点计算，与后端 Python 的 len() 一致。
+const int maxWordLength = 40;
+
 /// 手动添加单词的校验结果。
-enum AddWordResult { added, empty, noLetter, duplicate }
+enum AddWordResult { added, empty, noLetter, tooLong, duplicate }
 
 /// 校验手动输入的单词。仅用于手动添加，不过滤 OCR 返回的词。
 AddWordResult validateNewWord(String raw, Iterable<String> existing) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) return AddWordResult.empty;
   if (!trimmed.contains(RegExp(r'[A-Za-z]'))) return AddWordResult.noLetter;
+  if (trimmed.runes.length > maxWordLength) return AddWordResult.tooLong;
 
   final lower = trimmed.toLowerCase();
   if (existing.any((w) => w.toLowerCase() == lower)) {
@@ -30,6 +39,8 @@ class AppProvider extends ChangeNotifier {
   // 识别 / 生成流程的阶段与错误。历史列表的 loading / error 单独管理，互不影响。
   FlowPhase _phase = FlowPhase.idle;
   String? _error;
+  // 识别 / 生成失败的类别：决定是否显示"重试"、是否显示网络错误画面
+  FlowErrorKind? _errorKind;
   bool _isLoadingHistory = false;
   String? _historyError;
   LearningRecord? _currentRecord;
@@ -51,11 +62,15 @@ class AppProvider extends ChangeNotifier {
   // 降级 reason（开发环境下返回了示例数据）。null 表示未降级。
   String? _ocrDegradedReason;
   String? _storyDegradedReason;
+  // 流程序号：开始新照片或登出时递增。识别、生成、保存在 await 之后核对，
+  // 不一致说明期间已经换了照片或换了用户，返回的结果直接丢弃（A-2 前端方案第 3 项）。
+  int _flowSeq = 0;
 
   // Getters
   FlowPhase get phase => _phase;
   bool get isBusy => _phase != FlowPhase.idle;
   String? get error => _error;
+  FlowErrorKind? get errorKind => _errorKind;
   bool get isLoadingHistory => _isLoadingHistory;
   String? get historyError => _historyError;
   LearningRecord? get currentRecord => _currentRecord;
@@ -79,7 +94,11 @@ class AppProvider extends ChangeNotifier {
   String? get ocrDegradedReason => _ocrDegradedReason;
   String? get storyDegradedReason => _storyDegradedReason;
 
-  void setPickedImage(XFile? image) {
+  /// 首页选了一张新照片：清掉上一轮的单词、结果、保存状态与错误，保留难度。
+  /// 修复"新照片进入确认页时按钮仍显示「重新生成」"（上一轮的 currentRecord 没有清掉）。
+  void startNewCapture(XFile image) {
+    _flowSeq++;
+    _resetFlow();
     _pickedImage = image;
     notifyListeners();
   }
@@ -90,7 +109,10 @@ class AppProvider extends ChangeNotifier {
     if (rawWords is List) {
       return List<String>.from(rawWords.map((e) => e.toString()));
     } else if (rawWords is String) {
-      return rawWords.split(RegExp(r'[,\s]+')).where((w) => w.isNotEmpty).toList();
+      return rawWords
+          .split(RegExp(r'[,\s]+'))
+          .where((w) => w.isNotEmpty)
+          .toList();
     } else if (rawWords is Map) {
       return List<String>.from(rawWords.keys.map((e) => e.toString()));
     }
@@ -112,15 +134,18 @@ class AppProvider extends ChangeNotifier {
   Future<void> recognizeText() async {
     if (_pickedImage == null) return;
 
+    final seq = _flowSeq;
     _phase = FlowPhase.recognizing;
     _error = null;
+    _errorKind = null;
     notifyListeners();
 
     try {
       final bytes = await _pickedImage!.readAsBytes();
       final filename = _pickedImage!.name;
       final result = await _api.recognizeText(bytes, filename);
-      
+      if (seq != _flowSeq) return;
+
       // 使用智能解析器提取单词列表。OCR 返回的词不做过滤，原样呈现给用户。
       _recognizedWords = _extractWords(result['words']);
       _ocrDegradedReason = degradedReasonOf(result);
@@ -131,9 +156,12 @@ class AppProvider extends ChangeNotifier {
       _phase = FlowPhase.idle;
       notifyListeners();
     } catch (e) {
+      if (seq != _flowSeq) return;
       debugPrint('recognizeText failed: $e');
       _ocrDegradedReason = null;
-      _error = 'Failed to recognize text: ${errorMessage(e)}';
+      // 只存原因：识别页单独显示"识别失败"标题
+      _error = errorMessage(e);
+      _errorKind = classifyFlowError(e);
       _phase = FlowPhase.idle;
       notifyListeners();
     }
@@ -149,6 +177,18 @@ class AppProvider extends ChangeNotifier {
     if (!_selectedWords.remove(word)) {
       _selectedWords.add(word);
     }
+    notifyListeners();
+  }
+
+  /// 选中词表中的全部单词（Q-F4）。
+  void selectAll() {
+    _selectedWords.addAll(_recognizedWords);
+    notifyListeners();
+  }
+
+  /// 取消全部选中（Q-F4）。单词仍留在词表中。
+  void clearSelection() {
+    _selectedWords.clear();
     notifyListeners();
   }
 
@@ -176,6 +216,7 @@ class AppProvider extends ChangeNotifier {
 
     _phase = FlowPhase.generating;
     _error = null;
+    _errorKind = null;
     notifyListeners();
 
     await _generateStory(words);
@@ -183,15 +224,20 @@ class AppProvider extends ChangeNotifier {
 
   void clearError() {
     _error = null;
+    _errorKind = null;
     notifyListeners();
   }
 
   Future<void> _generateStory(List<String> words) async {
+    final seq = _flowSeq;
+    // 记下本次请求用的难度：保存时随记录发送（D-1 / U-12）
+    final difficulty = _difficulty;
     try {
       final result = await _api.composeLearning(
         words,
-        difficulty: _difficulty.apiValue,
+        difficulty: difficulty.apiValue,
       );
+      if (seq != _flowSeq) return;
 
       // 使用安全提取器，即使 AI 返回了嵌套大括号也能安全提取文本
       final englishStory = _safeString(result['english']);
@@ -209,13 +255,17 @@ class AppProvider extends ChangeNotifier {
         chineseTranslation: chineseTranslation,
         englishBlank: _safeString(result['english_blank']),
         chineseBlank: _safeString(result['chinese_blank']),
+        difficulty: difficulty,
+        isDegraded: _storyDegradedReason != null,
       );
 
       _phase = FlowPhase.idle;
       notifyListeners();
     } catch (e) {
+      if (seq != _flowSeq) return;
       debugPrint('generateStory failed: $e');
-      _error = 'Failed to generate story: ${errorMessage(e)}';
+      _error = appL10n.confirmGenerateFailed(errorMessage(e));
+      _errorKind = classifyFlowError(e);
       _phase = FlowPhase.idle;
       notifyListeners();
     }
@@ -226,21 +276,27 @@ class AppProvider extends ChangeNotifier {
   Future<bool> saveCurrentRecord() async {
     if (_currentRecord == null || _isSaving || _isSaved) return false;
 
+    final seq = _flowSeq;
     _isSaving = true;
     _saveError = null;
     notifyListeners();
 
     try {
       await _api.saveRecord(_currentRecord!.toJson());
+      if (seq != _flowSeq) return false;
       _isSaved = true;
       return true;
     } catch (e) {
+      if (seq != _flowSeq) return false;
       debugPrint('saveRecord failed: $e');
-      _saveError = 'Failed to save record: ${errorMessage(e)}';
+      _saveError = appL10n.saveFailed(errorMessage(e));
       return false;
     } finally {
-      _isSaving = false;
-      notifyListeners();
+      // 期间已登出或换了照片：状态已被重置，不再改动
+      if (seq == _flowSeq) {
+        _isSaving = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -264,7 +320,7 @@ class AppProvider extends ChangeNotifier {
     } catch (e) {
       if (seq != _historyRequestSeq) return;
       debugPrint('loadRecords failed: $e');
-      _historyError = 'Failed to load records: ${errorMessage(e)}';
+      _historyError = appL10n.historyLoadFailed(errorMessage(e));
     }
 
     _isLoadingHistory = false;
@@ -301,7 +357,7 @@ class AppProvider extends ChangeNotifier {
     } catch (e) {
       if (seq != _historyRequestSeq) return;
       debugPrint('loadMoreRecords failed: $e');
-      _historyError = 'Failed to load more records: ${errorMessage(e)}';
+      _historyError = appL10n.historyLoadMoreFailed(errorMessage(e));
     }
 
     _isLoadingMoreHistory = false;
@@ -323,9 +379,12 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteRecord(int id) async {
+    final seq = _historyRequestSeq;
     _historyError = null;
     try {
       await _api.deleteRecord(id);
+      // 期间已登出：列表已清空，不再改动（避免把错误带给下一个登录的用户）
+      if (seq != _historyRequestSeq) return;
       final before = _records.length;
       _records.removeWhere((r) => r.id == id);
       if (_records.length < before && _historyTotal > 0) _historyTotal--;
@@ -333,23 +392,42 @@ class AppProvider extends ChangeNotifier {
       // 已加载的都删光了但后端还有：重新取第 1 页，避免误显示空列表
       if (_records.isEmpty && _historyTotal > 0) await loadRecords();
     } catch (e) {
+      if (seq != _historyRequestSeq) return;
       debugPrint('deleteRecord failed: $e');
-      _historyError = 'Failed to delete record: ${errorMessage(e)}';
+      _historyError = appL10n.historyDeleteFailed(errorMessage(e));
       notifyListeners();
     }
   }
 
-  void clearCurrentRecord() {
-    _currentRecord = null;
-    _pickedImage = null;
+  /// 登出或凭证失效时清空全部用户相关状态（A-2 前端方案第 3 项，共 23 个字段）。
+  /// 两个序号都递增，让还在路上的识别、生成、保存、历史请求的结果被丢弃。
+  void resetForSignOut() {
+    _flowSeq++;
+    _historyRequestSeq++;
+    _resetFlow();
+    _difficulty = Difficulty.defaultValue;
+    _records = [];
+    _historyTotal = 0;
+    _historyQuery = '';
+    _isLoadingHistory = false;
+    _isLoadingMoreHistory = false;
+    _historyError = null;
+    notifyListeners();
+  }
+
+  /// 识别 / 生成流程与当前结果（不含难度、历史列表）。
+  void _resetFlow() {
+    _phase = FlowPhase.idle;
     _error = null;
+    _errorKind = null;
+    _pickedImage = null;
     _recognizedWords = [];
     _selectedWords.clear();
+    _ocrDegradedReason = null;
+    _storyDegradedReason = null;
+    _currentRecord = null;
     _isSaving = false;
     _isSaved = false;
     _saveError = null;
-    _ocrDegradedReason = null;
-    _storyDegradedReason = null;
-    notifyListeners();
   }
 }

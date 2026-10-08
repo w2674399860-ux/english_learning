@@ -49,46 +49,89 @@ void main() {
         statusCode: 503,
         data: {'detail': 'AI service is unavailable. Please try again later.'},
       );
-      expect(errorMessage(e), 'AI service is unavailable. Please try again later.');
+      expect(
+        errorMessage(e),
+        'AI service is unavailable. Please try again later.',
+      );
     });
 
     test('detail 为数组（校验错误）时显示通用文案', () {
-      final e = _dioError(statusCode: 422, data: {
-        'detail': [
-          {'msg': 'field required'},
-        ],
-      });
-      expect(errorMessage(e), 'Invalid request.');
+      final e = _dioError(
+        statusCode: 422,
+        data: {
+          'detail': [
+            {'msg': 'field required'},
+          ],
+        },
+      );
+      expect(errorMessage(e), '请求参数有误。');
     });
 
     test('超时', () {
       expect(
         errorMessage(_dioError(type: DioExceptionType.receiveTimeout)),
-        'The request timed out. Please try again.',
+        '请求超时，请重试。',
       );
       expect(
         errorMessage(_dioError(type: DioExceptionType.connectionTimeout)),
-        'The request timed out. Please try again.',
+        '请求超时，请重试。',
       );
     });
 
     test('连不上服务器', () {
       expect(
         errorMessage(_dioError(type: DioExceptionType.connectionError)),
-        'Cannot reach the server. Please check your connection.',
+        '无法连接服务器，请检查网络。',
       );
     });
 
     test('响应体不是 JSON 时按状态码兜底', () {
       final e = _dioError(statusCode: 500, data: 'Internal Server Error');
-      expect(errorMessage(e), 'Server error (500). Please try again later.');
+      expect(errorMessage(e), '服务器出错（500），请稍后再试。');
     });
 
     test('非 Dio 异常不暴露原始文本', () {
+      expect(errorMessage(const FormatException('boom')), '出了点问题，请重试。');
+    });
+  });
+
+  group('classifyFlowError', () {
+    test('连不上服务器：network', () {
       expect(
-        errorMessage(const FormatException('boom')),
-        'Something went wrong. Please try again.',
+        classifyFlowError(_dioError(type: DioExceptionType.connectionError)),
+        FlowErrorKind.network,
       );
+    });
+
+    test('超时与 5xx：可重试', () {
+      for (final type in [
+        DioExceptionType.connectionTimeout,
+        DioExceptionType.sendTimeout,
+        DioExceptionType.receiveTimeout,
+      ]) {
+        expect(classifyFlowError(_dioError(type: type)), FlowErrorKind.retryable);
+      }
+      for (final status in [500, 502, 503, 504]) {
+        expect(
+          classifyFlowError(_dioError(statusCode: status)),
+          FlowErrorKind.retryable,
+          reason: '$status',
+        );
+      }
+    });
+
+    test('429、400（不是图片）、413（图片太大）、422：不可重试', () {
+      for (final status in [400, 413, 422, 429]) {
+        expect(
+          classifyFlowError(_dioError(statusCode: status)),
+          FlowErrorKind.notRetryable,
+          reason: '$status',
+        );
+      }
+    });
+
+    test('非 Dio 异常（如读取图片失败）按可重试处理', () {
+      expect(classifyFlowError(const FormatException('x')), FlowErrorKind.retryable);
     });
   });
 }
