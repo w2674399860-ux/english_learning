@@ -262,7 +262,12 @@ def test_logs_never_contain_passwords_or_tokens(db_client, caplog):
             json={"old_password": DEFAULT_PASSWORD, "new_password": "brand-new-pass-7"},
         )
         me(db_client, "forged-token-value")
+        # 带凭证访问业务接口、登出（E-2：全部日志都按统一配置输出）
+        token2 = login(db_client, "alice", "brand-new-pass-7").json()["token"]
+        db_client.get("/api/v1/history/records", headers=bearer(token2))
+        db_client.post(f"{AUTH}/logout", headers=bearer(token2))
     text_ = caplog.text
+    assert token2 not in text_
     for secret in (DEFAULT_PASSWORD, "wrong-password-1", "another-secret-9", "brand-new-pass-7", token,
                    "forged-token-value", "Bearer", "$argon2"):
         assert secret not in text_, secret

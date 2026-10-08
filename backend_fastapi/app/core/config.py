@@ -4,6 +4,8 @@ from typing import Literal, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
+from app.core.logging import LOG_LEVELS
+
 # scheme://主机[:端口]；主机为域名 / IPv4 或带方括号的 IPv6
 _ORIGIN_RE = re.compile(r"^(https?)://(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::(\d{1,5}))?$", re.IGNORECASE)
 
@@ -47,6 +49,8 @@ class Settings(BaseSettings):
     server_host: str = "0.0.0.0"
     server_port: int = 8000
     debug: bool = True
+    # 日志级别（E-2）：DEBUG / INFO / WARNING / ERROR，不区分大小写
+    log_level: str = "INFO"
 
     # OCR Service
     ocr_service_url: str = "http://localhost:8866"
@@ -95,6 +99,14 @@ class Settings(BaseSettings):
     def _validate_cors_allow_origins(cls, value: str) -> str:
         parse_cors_origins(value)
         return value
+
+    @field_validator("log_level")
+    @classmethod
+    def _validate_log_level(cls, value: str) -> str:
+        level = value.strip().upper()
+        if level not in LOG_LEVELS:
+            raise ValueError(f"LOG_LEVEL 必须是 {' / '.join(LOG_LEVELS)} 之一")
+        return level
 
     @property
     def cors_origins(self) -> list[str]:

@@ -10,10 +10,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.api.router import api_router
 from app.core.body_limit import BodySizeLimitMiddleware
 from app.db.session import dispose_engine
 
+# 先于其他模块记日志之前配置（E-2）：统一格式、UTC 时间戳、输出到标准输出
+configure_logging(settings.log_level)
 logger = logging.getLogger("app")
 
 SESSION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60

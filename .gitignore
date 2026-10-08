@@ -29,6 +29,8 @@ docker/.env
 
 # Docker
 docker/data/
+# mysqldump 备份（E-2）
+docker/backup/
 
 # OS
 .DS_Store
