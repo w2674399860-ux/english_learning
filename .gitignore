@@ -6,6 +6,8 @@ __pycache__/
 .coverage
 htmlcov/
 backend_fastapi/data/
+# Flutter Web 构建产物，由 scripts/build_web.ps1 生成（E-1）
+backend_fastapi/static/
 .venv/
 venv/
 
