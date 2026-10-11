@@ -59,6 +59,8 @@ dev_dependencies:
 
   # 只在开发时用来生成图标与启动页（dart run ...），不进运行时，配置见文件末尾
   flutter_launcher_icons: 0.14.4
+  # 2.4.8 依赖 meta ^1.18.0，与 Flutter 3.41 的 flutter_test（meta 1.17.0）冲突
+  flutter_native_splash: 2.4.7
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -133,7 +135,12 @@ flutter:
 # 重新生成：
 #   dart run flutter_launcher_icons
 #   dart run flutter_native_splash:create
-# 之后 web/favicon.png 要用 app_icon_simple.png 重新缩放覆盖（32 像素及以下只用云朵简版）。
+# 生成后需手动检查：
+#   - web/favicon.png 用 app_icon_simple.png 缩放为 32×32 覆盖（32 像素及以下只用云朵简版）
+#   - flutter_launcher_icons 会把 project.pbxproj 的
+#     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS 误改为 AppIcon，改回 YES
+#   - flutter_native_splash 会重排 ios/Runner/Info.plist（只多出默认值 UIStatusBarHidden=false），
+#     还原即可；它往 web/index.html 加的 viewport meta（禁止缩放）要删掉，Flutter Web 自己设置 viewport
 flutter_launcher_icons:
   image_path: assets/branding/app_icon_1024.png
   android: true
