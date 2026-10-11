@@ -6,6 +6,7 @@ import 'package:english_learning_app/l10n/l10n.dart';
 import 'package:english_learning_app/main.dart';
 import 'package:english_learning_app/pages/auth/login_page.dart';
 import 'package:english_learning_app/pages/home/home_page.dart';
+import 'package:english_learning_app/widgets/app_logo.dart';
 
 import 'helpers/fake_auth_api.dart';
 
@@ -20,6 +21,9 @@ void main() {
 
     expect(find.byType(LoginPage), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
+    // 登录页顶部：应用 Logo + appTitle 文字
+    expect(find.byType(AppLogo), findsOneWidget);
+    expect(find.text(appL10n.appTitle), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

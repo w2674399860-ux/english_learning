@@ -6,8 +6,8 @@ import '../../auth/auth_validation.dart';
 import '../../l10n/l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/theme_x.dart';
+import '../../widgets/app_logo.dart';
 import '../../widgets/error_notice.dart';
-import '../../widgets/illustration.dart';
 import '../../widgets/ink_card.dart';
 import '../../widgets/ink_text_field.dart';
 import '../../widgets/page_scaffold.dart';
@@ -15,7 +15,7 @@ import '../../widgets/tip_card.dart';
 import 'auth_widgets.dart';
 import 'register_page.dart';
 
-/// 登录页（设计稿 ai_7）。未登录时由 AuthGate 显示，没有底部导航栏。
+/// 登录页（设计稿 ai_7；顶部插画改为应用 Logo，见「梦词」改名）。未登录时由 AuthGate 显示，没有底部导航栏。
 ///
 /// 状态：默认、必填项为空、提交中、登录失败 / 账号停用 / 网络错误（提示框）、
 /// 登录过于频繁（按钮倒计时）、登录已失效（顶部提示）。
@@ -93,12 +93,8 @@ class _LoginPageState extends State<LoginPage> {
                   TipCard(body: l10n.loginSessionExpired, icon: Icons.info),
                   SizedBox(height: tokens.spaceLg),
                 ],
-                Center(
-                  child: Illustration(
-                    kind: IllustrationKind.mascot,
-                    size: tokens.illustrationSizeSm,
-                  ),
-                ),
+                // 应用 Logo（图标图形）+ appTitle 文字
+                const Center(child: AppLogo()),
                 SizedBox(height: tokens.spaceSm),
                 Text(
                   l10n.appTitle,

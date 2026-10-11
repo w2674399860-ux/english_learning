@@ -57,6 +57,9 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+  # 只在开发时用来生成图标与启动页（dart run ...），不进运行时，配置见文件末尾
+  flutter_launcher_icons: 0.14.4
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
@@ -82,6 +85,8 @@ flutter:
     - assets/images/mascot_book.webp
     - assets/images/illus_home.webp
     - assets/images/illus_sad.webp
+    # 应用图标前景层（透明背景），登录页的 Logo 用。图标源图见 assets/branding/
+    - assets/branding/app_icon_foreground_1024.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -122,3 +127,39 @@ flutter:
     - family: NotoSansSC
       fonts:
         - asset: assets/fonts/NotoSansSC-Regular.ttf
+
+# ---- 图标与启动页生成配置（只在开发时用）----------------------------------------
+# 源图在 assets/branding/（由 docs/DreamWord app icon.png 机械处理得到）。背景色 #FDF9F2 = 主题 surface。
+# 重新生成：
+#   dart run flutter_launcher_icons
+#   dart run flutter_native_splash:create
+# 之后 web/favicon.png 要用 app_icon_simple.png 重新缩放覆盖（32 像素及以下只用云朵简版）。
+flutter_launcher_icons:
+  image_path: assets/branding/app_icon_1024.png
+  android: true
+  # Android 8+ 自适应图标：前景图形在 66dp 安全圆内，背景层为米白纯色
+  adaptive_icon_background: "#FDF9F2"
+  adaptive_icon_foreground: assets/branding/app_icon_foreground_1024.png
+  # 前景图已经缩进 66dp 安全圆，不让工具再额外内缩（工具默认 16%）
+  adaptive_icon_foreground_inset: 0
+  ios: true
+  # App Store 不接受带透明通道的图标
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: assets/branding/app_icon_1024.png
+    background_color: "#FDF9F2"
+    theme_color: "#B32053"
+
+flutter_native_splash:
+  # 只显示图标版，不显示文字
+  color: "#FDF9F2"
+  image: assets/branding/app_icon_foreground_1024.png
+  android_12:
+    # Android 12+：系统启动页 API，居中图标，图标背景与启动页背景一致
+    image: assets/branding/app_icon_foreground_1024.png
+    color: "#FDF9F2"
+    icon_background_color: "#FDF9F2"
+  android: true
+  ios: true
+  web: true
