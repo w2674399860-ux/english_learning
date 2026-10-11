@@ -1,5 +1,6 @@
 import 'package:english_learning_app/auth/session.dart';
 import 'package:english_learning_app/auth/token_store.dart';
+import 'package:english_learning_app/l10n/l10n.dart';
 import 'package:english_learning_app/pages/home/home_page.dart';
 import 'package:english_learning_app/providers/app_provider.dart';
 import 'package:english_learning_app/providers/auth_provider.dart';
@@ -44,7 +45,7 @@ Future<void> _pumpHome(
 void main() {
   testWidgets('首页元素：标题、插画、标语、两个入口、小贴士、账户菜单', (tester) async {
     await _pumpHome(tester);
-    expect(find.text('AI 英语学习'), findsOneWidget);
+    expect(find.text(appL10n.appTitle), findsOneWidget);
     expect(find.text('用 AI 学英语'), findsOneWidget);
     expect(find.text('上传一张照片，提取英文单词，\n并生成学习材料'), findsOneWidget);
     expect(find.byType(HeroActionButton), findsNWidgets(2));

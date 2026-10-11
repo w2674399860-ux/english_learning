@@ -1,11 +1,11 @@
 {
-    "name": "AI 英语学习",
-    "short_name": "AI 英语学习",
+    "name": "梦词",
+    "short_name": "梦词",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FDF9F2",
     "theme_color": "#B32053",
-    "description": "拍照提取英文单词，生成短文与填空练习。",
+    "description": "拍下要背的单词，读一篇小故事，做一组填空，轻松记住它们。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

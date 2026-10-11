@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-// U-10 I-f：App 名称在各平台统一为"AI 英语学习"（原来在 6 处不一致）。
+// App 显示名称在各平台统一为"梦词"（U-10 I-f 统一为"AI 英语学习"，2026-10 改名）。
 void main() {
-  const name = 'AI 英语学习';
+  const name = '梦词';
 
   String read(String path) => File(path).readAsStringSync();
 
@@ -25,12 +25,17 @@ void main() {
     );
   });
 
-  test('iOS 桌面名称', () {
+  test('iOS 桌面名称与 CFBundleName', () {
+    final plist = read('ios/Runner/Info.plist');
     expect(
-      read('ios/Runner/Info.plist'),
+      plist,
       matches(
         RegExp('<key>CFBundleDisplayName</key>\\s*<string>$name</string>'),
       ),
+    );
+    expect(
+      plist,
+      matches(RegExp('<key>CFBundleName</key>\\s*<string>$name</string>')),
     );
   });
 }

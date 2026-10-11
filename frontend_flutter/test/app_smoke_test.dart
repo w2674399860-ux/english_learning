@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:english_learning_app/auth/token_store.dart';
+import 'package:english_learning_app/l10n/l10n.dart';
 import 'package:english_learning_app/main.dart';
 import 'package:english_learning_app/pages/auth/login_page.dart';
 import 'package:english_learning_app/pages/home/home_page.dart';
@@ -20,6 +21,18 @@ void main() {
     expect(find.byType(LoginPage), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('应用标题来自 ARB 的 appTitle', (tester) async {
+    await tester.pumpWidget(
+      MyApp(authApi: FakeAuthApi(), tokenStore: InMemoryTokenStore()),
+    );
+    await tester.pump();
+
+    // MaterialApp 用 onGenerateTitle 生成 Title 组件（浏览器标签页、任务切换器显示的名称）
+    final title = tester.widget<Title>(find.byType(Title));
+    expect(title.title, appL10n.appTitle);
+    expect(title.title, '梦词');
   });
 
   testWidgets('已登录：显示首页与底部导航，界面与系统控件为中文', (tester) async {

@@ -126,7 +126,7 @@ class _ComponentGalleryState extends State<ComponentGallery> {
         padding: EdgeInsets.all(tokens.pageMargin),
         children: [
           section('文字层级', [
-            Text('displayMedium AI 英语学习', style: context.text.displayMedium),
+            Text('displayMedium ${context.l10n.appTitle}', style: context.text.displayMedium),
             Text('headlineLarge 用 AI 学英语', style: context.text.headlineLarge),
             Text('headlineMedium 识别失败', style: context.text.headlineMedium),
             Text(

@@ -97,7 +97,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In zh, this message translates to:
-  /// **'AI 英语学习'**
+  /// **'梦词'**
   String get appTitle;
 
   /// No description provided for @commonCancel.

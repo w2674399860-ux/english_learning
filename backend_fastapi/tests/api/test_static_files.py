@@ -172,7 +172,7 @@ def test_without_index_returns_api_message(tmp_path, monkeypatch, client):
     monkeypatch.setattr(main, "static_dir", str(tmp_path / "empty"))
     resp = client.get("/anything")
     assert resp.status_code == 200
-    assert resp.json() == {"message": "AI English Learning API"}
+    assert resp.json() == {"message": "梦词 API"}
 
 
 # ---- 其他路由不受影响 -------------------------------------------------------
@@ -185,7 +185,7 @@ def test_docs_unaffected(site, client):
     resp = client.get("/docs")
     assert resp.status_code == 200
     assert "swagger-ui" in resp.text.lower()
-    assert client.get("/openapi.json").json()["info"]["title"] == "AI English Learning App"
+    assert client.get("/openapi.json").json()["info"]["title"] == "梦词 API"
 
 
 def test_api_routes_unaffected(site, client, use_ocr):

@@ -87,8 +87,8 @@ def docs_options(enabled: bool) -> dict:
 
 
 app = FastAPI(
-    title="AI English Learning App",
-    description="Backend API for AI-powered English learning application",
+    title="梦词 API",
+    description="梦词后端接口",
     version="1.0.0",
     lifespan=lifespan,
     **docs_options(settings.api_docs_enabled),
@@ -150,7 +150,7 @@ async def serve_flutter(full_path: str):
     if os.path.exists(index_path):
         return FileResponse(index_path)
 
-    return {"message": "AI English Learning API"}
+    return {"message": "梦词 API"}
 
 
 def run() -> None:

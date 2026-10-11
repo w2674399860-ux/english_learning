@@ -8,7 +8,7 @@ import '../helpers/pump_app.dart';
 void main() {
   test('只提供简体中文', () {
     expect(AppLocalizations.supportedLocales, [const Locale('zh')]);
-    expect(appL10n.appTitle, 'AI 英语学习');
+    expect(appL10n.appTitle, '梦词');
   });
 
   test('带参数的文案', () {
